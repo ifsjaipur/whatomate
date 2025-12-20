@@ -7,6 +7,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Progress } from '@/components/ui/progress'
 import {
   Dialog,
   DialogContent,
@@ -16,6 +18,28 @@ import {
   DialogTitle,
   DialogTrigger
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { campaignsService, templatesService, accountsService } from '@/services/api'
 import { toast } from 'vue-sonner'
 import {
@@ -100,6 +124,12 @@ const newCampaign = ref({
   whatsapp_account: '',
   template_id: ''
 })
+
+// AlertDialog state
+const deleteDialogOpen = ref(false)
+const cancelDialogOpen = ref(false)
+const campaignToDelete = ref<Campaign | null>(null)
+const campaignToCancel = ref<Campaign | null>(null)
 
 onMounted(async () => {
   await Promise.all([
@@ -206,12 +236,19 @@ async function pauseCampaign(campaign: Campaign) {
   }
 }
 
-async function cancelCampaign(campaign: Campaign) {
-  if (!confirm('Are you sure you want to cancel this campaign?')) return
+function openCancelDialog(campaign: Campaign) {
+  campaignToCancel.value = campaign
+  cancelDialogOpen.value = true
+}
+
+async function confirmCancelCampaign() {
+  if (!campaignToCancel.value) return
 
   try {
-    await campaignsService.cancel(campaign.id)
+    await campaignsService.cancel(campaignToCancel.value.id)
     toast.success('Campaign cancelled')
+    cancelDialogOpen.value = false
+    campaignToCancel.value = null
     await fetchCampaigns()
   } catch (error: any) {
     const message = error.response?.data?.message || 'Failed to cancel campaign'
@@ -219,12 +256,19 @@ async function cancelCampaign(campaign: Campaign) {
   }
 }
 
-async function deleteCampaign(campaign: Campaign) {
-  if (!confirm(`Are you sure you want to delete "${campaign.name}"?`)) return
+function openDeleteDialog(campaign: Campaign) {
+  campaignToDelete.value = campaign
+  deleteDialogOpen.value = true
+}
+
+async function confirmDeleteCampaign() {
+  if (!campaignToDelete.value) return
 
   try {
-    await campaignsService.delete(campaign.id)
+    await campaignsService.delete(campaignToDelete.value.id)
     toast.success('Campaign deleted')
+    deleteDialogOpen.value = false
+    campaignToDelete.value = null
     await fetchCampaigns()
   } catch (error: any) {
     const message = error.response?.data?.message || 'Failed to delete campaign'
@@ -407,34 +451,32 @@ function getRecipientStatusBadge(status: string): 'default' | 'secondary' | 'des
               </div>
               <div class="grid gap-2">
                 <Label for="account">WhatsApp Account</Label>
-                <select
-                  id="account"
-                  v-model="newCampaign.whatsapp_account"
-                  :disabled="isCreating"
-                  class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <option value="" disabled>Select an account</option>
-                  <option v-for="account in accounts" :key="account.id" :value="account.name">
-                    {{ account.name }}
-                  </option>
-                </select>
+                <Select v-model="newCampaign.whatsapp_account" :disabled="isCreating">
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem v-for="account in accounts" :key="account.id" :value="account.name">
+                      {{ account.name }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
                 <p v-if="accounts.length === 0" class="text-xs text-muted-foreground">
                   No accounts found. Please add a WhatsApp account first.
                 </p>
               </div>
               <div class="grid gap-2">
                 <Label for="template">Message Template</Label>
-                <select
-                  id="template"
-                  v-model="newCampaign.template_id"
-                  :disabled="isCreating"
-                  class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <option value="" disabled>Select a template</option>
-                  <option v-for="template in templates" :key="template.id" :value="template.id">
-                    {{ template.display_name || template.name }}
-                  </option>
-                </select>
+                <Select v-model="newCampaign.template_id" :disabled="isCreating">
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem v-for="template in templates" :key="template.id" :value="template.id">
+                      {{ template.display_name || template.name }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
                 <p v-if="templates.length === 0" class="text-xs text-muted-foreground">
                   No templates found. Please create a template first.
                 </p>
@@ -489,12 +531,7 @@ function getRecipientStatusBadge(status: string): 'default' | 'secondary' | 'des
                 <span>Progress</span>
                 <span>{{ getProgressPercentage(campaign) }}%</span>
               </div>
-              <div class="h-2 bg-muted rounded-full overflow-hidden">
-                <div
-                  class="h-full bg-primary transition-all duration-300"
-                  :style="{ width: `${getProgressPercentage(campaign)}%` }"
-                />
-              </div>
+              <Progress :model-value="getProgressPercentage(campaign)" class="h-2" />
             </div>
 
             <!-- Stats -->
@@ -540,30 +577,43 @@ function getRecipientStatusBadge(status: string): 'default' | 'secondary' | 'des
             <!-- Actions -->
             <div class="flex items-center justify-between border-t pt-4">
               <div class="flex gap-2">
-                <Button variant="ghost" size="icon" title="View Recipients" @click="viewRecipients(campaign)">
-                  <Eye class="h-4 w-4" />
-                </Button>
-                <Button
-                  v-if="campaign.status === 'draft'"
-                  variant="ghost"
-                  size="icon"
-                  title="Add Recipients"
-                  @click="openAddRecipientsDialog(campaign)"
-                >
-                  <UserPlus class="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" title="Edit Campaign">
-                  <Pencil class="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title="Delete Campaign"
-                  @click="deleteCampaign(campaign)"
-                  :disabled="campaign.status === 'running' || campaign.status === 'processing'"
-                >
-                  <Trash2 class="h-4 w-4 text-destructive" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button variant="ghost" size="icon" @click="viewRecipients(campaign)">
+                      <Eye class="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>View Recipients</TooltipContent>
+                </Tooltip>
+                <Tooltip v-if="campaign.status === 'draft'">
+                  <TooltipTrigger as-child>
+                    <Button variant="ghost" size="icon" @click="openAddRecipientsDialog(campaign)">
+                      <UserPlus class="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Add Recipients</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button variant="ghost" size="icon">
+                      <Pencil class="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Edit Campaign</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      @click="openDeleteDialog(campaign)"
+                      :disabled="campaign.status === 'running' || campaign.status === 'processing'"
+                    >
+                      <Trash2 class="h-4 w-4 text-destructive" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Delete Campaign</TooltipContent>
+                </Tooltip>
               </div>
               <div class="flex gap-2">
                 <Button
@@ -595,7 +645,7 @@ function getRecipientStatusBadge(status: string): 'default' | 'secondary' | 'des
                   v-if="campaign.status === 'running' || campaign.status === 'paused' || campaign.status === 'processing' || campaign.status === 'queued'"
                   variant="destructive"
                   size="sm"
-                  @click="cancelCampaign(campaign)"
+                  @click="openCancelDialog(campaign)"
                 >
                   <XCircle class="h-4 w-4 mr-1" />
                   Cancel
@@ -738,5 +788,37 @@ function getRecipientStatusBadge(status: string): 'default' | 'secondary' | 'des
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <!-- Delete Confirmation Dialog -->
+    <AlertDialog v-model:open="deleteDialogOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to delete "{{ campaignToDelete?.name }}"? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction @click="confirmDeleteCampaign">Delete</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <!-- Cancel Confirmation Dialog -->
+    <AlertDialog v-model:open="cancelDialogOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Cancel Campaign</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to cancel "{{ campaignToCancel?.name }}"? This will stop all pending messages.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep Running</AlertDialogCancel>
+          <AlertDialogAction @click="confirmCancelCampaign">Cancel Campaign</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>

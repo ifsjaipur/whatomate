@@ -10,6 +10,12 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { toast } from 'vue-sonner'
 import {
   Search,
@@ -283,15 +289,30 @@ function getMessageContent(message: Message): string {
             </div>
           </div>
           <div class="flex items-center gap-2">
-            <Button variant="ghost" size="icon">
-              <Phone class="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="icon">
-              <Video class="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="icon">
-              <MoreVertical class="h-5 w-5" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button variant="ghost" size="icon">
+                  <Phone class="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Voice call</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button variant="ghost" size="icon">
+                  <Video class="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Video call</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button variant="ghost" size="icon">
+                  <MoreVertical class="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>More options</TooltipContent>
+            </Tooltip>
           </div>
         </div>
 
@@ -336,12 +357,22 @@ function getMessageContent(message: Message): string {
         <div class="p-4 border-t bg-card">
           <form @submit.prevent="sendMessage" class="flex items-end gap-2">
             <div class="flex gap-1">
-              <Button type="button" variant="ghost" size="icon">
-                <Smile class="h-5 w-5" />
-              </Button>
-              <Button type="button" variant="ghost" size="icon">
-                <Paperclip class="h-5 w-5" />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Button type="button" variant="ghost" size="icon">
+                    <Smile class="h-5 w-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Emoji</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Button type="button" variant="ghost" size="icon">
+                    <Paperclip class="h-5 w-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Attach file</TooltipContent>
+              </Tooltip>
             </div>
             <Textarea
               v-model="messageInput"
@@ -350,13 +381,18 @@ function getMessageContent(message: Message): string {
               :rows="1"
               @keydown.enter.exact.prevent="sendMessage"
             />
-            <Button
-              type="submit"
-              size="icon"
-              :disabled="!messageInput.trim() || isSending"
-            >
-              <Send class="h-5 w-5" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button
+                  type="submit"
+                  size="icon"
+                  :disabled="!messageInput.trim() || isSending"
+                >
+                  <Send class="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Send message</TooltipContent>
+            </Tooltip>
           </form>
         </div>
       </template>

@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -16,6 +18,36 @@ import {
   DialogTitle,
   DialogTrigger
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
 import { chatbotService } from '@/services/api'
 import { toast } from 'vue-sonner'
 import { Plus, Pencil, Trash2, Key, Search, ArrowLeft } from 'lucide-vue-next'
@@ -42,6 +74,8 @@ const isDialogOpen = ref(false)
 const isSubmitting = ref(false)
 const searchQuery = ref('')
 const editingRule = ref<KeywordRule | null>(null)
+const deleteDialogOpen = ref(false)
+const ruleToDelete = ref<KeywordRule | null>(null)
 
 const formData = ref({
   keywords: '',
@@ -152,12 +186,19 @@ async function saveRule() {
   }
 }
 
-async function deleteRule(rule: KeywordRule) {
-  if (!confirm('Are you sure you want to delete this keyword rule?')) return
+function openDeleteDialog(rule: KeywordRule) {
+  ruleToDelete.value = rule
+  deleteDialogOpen.value = true
+}
+
+async function confirmDeleteRule() {
+  if (!ruleToDelete.value) return
 
   try {
-    await chatbotService.deleteKeyword(rule.id)
+    await chatbotService.deleteKeyword(ruleToDelete.value.id)
     toast.success('Keyword rule deleted')
+    deleteDialogOpen.value = false
+    ruleToDelete.value = null
     await fetchRules()
   } catch (error) {
     toast.error('Failed to delete keyword rule')
@@ -223,15 +264,16 @@ $: filteredRules.value = searchQuery.value
               </div>
               <div class="space-y-2">
                 <Label for="match_type">Match Type</Label>
-                <select
-                  id="match_type"
-                  v-model="formData.match_type"
-                  class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="contains">Contains</option>
-                  <option value="exact">Exact Match</option>
-                  <option value="regex">Regex</option>
-                </select>
+                <Select v-model="formData.match_type">
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select match type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="contains">Contains</SelectItem>
+                    <SelectItem value="exact">Exact Match</SelectItem>
+                    <SelectItem value="regex">Regex</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div class="space-y-2">
                 <Label for="response">Response Message</Label>
@@ -299,11 +341,10 @@ $: filteredRules.value = searchQuery.value
                 />
               </div>
               <div class="flex items-center gap-2">
-                <input
+                <Switch
                   id="enabled"
-                  v-model="formData.enabled"
-                  type="checkbox"
-                  class="h-4 w-4 rounded border-gray-300"
+                  :checked="formData.enabled"
+                  @update:checked="formData.enabled = $event"
                 />
                 <Label for="enabled">Enabled</Label>
               </div>
@@ -330,6 +371,31 @@ $: filteredRules.value = searchQuery.value
     <!-- Rules List -->
     <ScrollArea class="flex-1">
       <div class="p-6 space-y-4">
+        <!-- Loading Skeleton -->
+        <template v-if="isLoading">
+          <Card v-for="i in 3" :key="i">
+            <CardContent class="p-4">
+              <div class="flex items-start justify-between">
+                <div class="flex-1">
+                  <div class="flex items-center gap-2 mb-2">
+                    <Skeleton class="h-4 w-4" />
+                    <Skeleton class="h-5 w-16" />
+                    <Skeleton class="h-5 w-16" />
+                    <Skeleton class="h-5 w-14" />
+                  </div>
+                  <Skeleton class="h-4 w-48 mb-2" />
+                  <Skeleton class="h-12 w-full" />
+                </div>
+                <div class="flex items-center gap-2 ml-4">
+                  <Skeleton class="h-8 w-8 rounded" />
+                  <Skeleton class="h-8 w-8 rounded" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </template>
+
+        <template v-else>
         <Card v-for="rule in rules" :key="rule.id">
           <CardContent class="p-4">
             <div class="flex items-start justify-between">
@@ -353,12 +419,22 @@ $: filteredRules.value = searchQuery.value
                 </p>
               </div>
               <div class="flex items-center gap-2 ml-4">
-                <Button variant="ghost" size="icon" @click="openEditDialog(rule)">
-                  <Pencil class="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" @click="deleteRule(rule)">
-                  <Trash2 class="h-4 w-4 text-destructive" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button variant="ghost" size="icon" @click="openEditDialog(rule)">
+                      <Pencil class="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Edit rule</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button variant="ghost" size="icon" @click="openDeleteDialog(rule)">
+                      <Trash2 class="h-4 w-4 text-destructive" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Delete rule</TooltipContent>
+                </Tooltip>
               </div>
             </div>
           </CardContent>
@@ -369,7 +445,24 @@ $: filteredRules.value = searchQuery.value
           <p class="text-lg font-medium">No keyword rules yet</p>
           <p class="text-sm">Create your first keyword rule to get started.</p>
         </div>
+        </template>
       </div>
     </ScrollArea>
+
+    <!-- Delete Confirmation Dialog -->
+    <AlertDialog v-model:open="deleteDialogOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Keyword Rule</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to delete this keyword rule? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction @click="confirmDeleteRule">Delete</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>

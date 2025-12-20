@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
   DialogContent,
@@ -16,6 +17,28 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { api } from '@/services/api'
 import { toast } from 'vue-sonner'
 import {
@@ -75,6 +98,10 @@ const isSubmitting = ref(false)
 const editingTemplate = ref<Template | null>(null)
 const isPreviewOpen = ref(false)
 const previewTemplate = ref<Template | null>(null)
+const deleteDialogOpen = ref(false)
+const templateToDelete = ref<Template | null>(null)
+const publishDialogOpen = ref(false)
+const templateToPublish = ref<Template | null>(null)
 
 const formData = ref({
   whatsapp_account: '',
@@ -240,12 +267,19 @@ async function saveTemplate() {
   }
 }
 
-async function deleteTemplate(template: Template) {
-  if (!confirm(`Are you sure you want to delete "${template.display_name || template.name}"?`)) return
+function openDeleteDialog(template: Template) {
+  templateToDelete.value = template
+  deleteDialogOpen.value = true
+}
+
+async function confirmDeleteTemplate() {
+  if (!templateToDelete.value) return
 
   try {
-    await api.delete(`/templates/${template.id}`)
+    await api.delete(`/templates/${templateToDelete.value.id}`)
     toast.success('Template deleted')
+    deleteDialogOpen.value = false
+    templateToDelete.value = null
     await fetchTemplates()
   } catch (error: any) {
     const message = error.response?.data?.message || 'Failed to delete template'
@@ -255,13 +289,20 @@ async function deleteTemplate(template: Template) {
 
 const publishingTemplateId = ref<string | null>(null)
 
-async function publishTemplate(template: Template) {
-  if (!confirm(`Publish "${template.display_name || template.name}" to Meta for approval?`)) return
+function openPublishDialog(template: Template) {
+  templateToPublish.value = template
+  publishDialogOpen.value = true
+}
 
-  publishingTemplateId.value = template.id
+async function confirmPublishTemplate() {
+  if (!templateToPublish.value) return
+
+  publishingTemplateId.value = templateToPublish.value.id
   try {
-    const response = await api.post(`/templates/${template.id}/publish`)
+    const response = await api.post(`/templates/${templateToPublish.value.id}/publish`)
     toast.success(response.data.data?.message || 'Template submitted to Meta for approval')
+    publishDialogOpen.value = false
+    templateToPublish.value = null
     await fetchTemplates()
   } catch (error: any) {
     const message = error.response?.data?.message || 'Failed to publish template'
@@ -426,16 +467,17 @@ function formatPreview(text: string, samples: any[]): string {
     <div class="p-4 border-b flex items-center gap-4 flex-wrap">
       <div class="flex items-center gap-2">
         <Label class="text-sm text-muted-foreground">Account:</Label>
-        <select
-          v-model="selectedAccount"
-          @change="fetchTemplates"
-          class="h-9 rounded-md border bg-background px-3 text-sm"
-        >
-          <option value="">All Accounts</option>
-          <option v-for="account in accounts" :key="account.id" :value="account.name">
-            {{ account.name }}
-          </option>
-        </select>
+        <Select v-model="selectedAccount" @update:model-value="fetchTemplates">
+          <SelectTrigger class="w-[180px]">
+            <SelectValue placeholder="All Accounts" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">All Accounts</SelectItem>
+            <SelectItem v-for="account in accounts" :key="account.id" :value="account.name">
+              {{ account.name }}
+            </SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       <div class="relative flex-1 max-w-md">
         <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -479,33 +521,50 @@ function formatPreview(text: string, samples: any[]): string {
             </div>
           </CardContent>
           <div class="px-6 pb-4 flex items-center gap-1 border-t pt-3">
-            <Button variant="ghost" size="sm" @click="openPreview(template)" title="Preview">
-              <Eye class="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              @click="openEditDialog(template)"
-              :disabled="template.status === 'APPROVED' || template.status === 'PENDING'"
-              title="Edit"
-            >
-              <Pencil class="h-4 w-4" />
-            </Button>
-            <Button
-              v-if="template.status === 'DRAFT' || template.status === 'REJECTED'"
-              variant="ghost"
-              size="sm"
-              @click="publishTemplate(template)"
-              :disabled="publishingTemplateId === template.id"
-              title="Publish to Meta"
-              class="text-blue-600 hover:text-blue-700"
-            >
-              <Loader2 v-if="publishingTemplateId === template.id" class="h-4 w-4 animate-spin" />
-              <Send v-else class="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="sm" @click="deleteTemplate(template)" title="Delete">
-              <Trash2 class="h-4 w-4 text-destructive" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button variant="ghost" size="sm" @click="openPreview(template)">
+                  <Eye class="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Preview</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  @click="openEditDialog(template)"
+                  :disabled="template.status === 'APPROVED' || template.status === 'PENDING'"
+                >
+                  <Pencil class="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Edit</TooltipContent>
+            </Tooltip>
+            <Tooltip v-if="template.status === 'DRAFT' || template.status === 'REJECTED'">
+              <TooltipTrigger as-child>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  @click="openPublishDialog(template)"
+                  :disabled="publishingTemplateId === template.id"
+                  class="text-blue-600 hover:text-blue-700"
+                >
+                  <Loader2 v-if="publishingTemplateId === template.id" class="h-4 w-4 animate-spin" />
+                  <Send v-else class="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Publish to Meta</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button variant="ghost" size="sm" @click="openDeleteDialog(template)">
+                  <Trash2 class="h-4 w-4 text-destructive" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Delete</TooltipContent>
+            </Tooltip>
           </div>
         </Card>
 
@@ -832,7 +891,7 @@ function formatPreview(text: string, samples: any[]): string {
           <Button variant="outline" @click="isPreviewOpen = false">Close</Button>
           <Button
             v-if="previewTemplate?.status === 'DRAFT' || previewTemplate?.status === 'REJECTED'"
-            @click="publishTemplate(previewTemplate!); isPreviewOpen = false"
+            @click="openPublishDialog(previewTemplate!); isPreviewOpen = false"
             :disabled="publishingTemplateId === previewTemplate?.id"
           >
             <Loader2 v-if="publishingTemplateId === previewTemplate?.id" class="h-4 w-4 mr-2 animate-spin" />
@@ -842,5 +901,37 @@ function formatPreview(text: string, samples: any[]): string {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <!-- Delete Confirmation Dialog -->
+    <AlertDialog v-model:open="deleteDialogOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Template</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to delete "{{ templateToDelete?.display_name || templateToDelete?.name }}"? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction @click="confirmDeleteTemplate">Delete</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <!-- Publish Confirmation Dialog -->
+    <AlertDialog v-model:open="publishDialogOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Publish Template</AlertDialogTitle>
+          <AlertDialogDescription>
+            Publish "{{ templateToPublish?.display_name || templateToPublish?.name }}" to Meta for approval? Once submitted, you won't be able to edit it until it's approved or rejected.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction @click="confirmPublishTemplate">Publish</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>

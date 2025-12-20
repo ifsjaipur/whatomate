@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -16,6 +18,28 @@ import {
   DialogTitle,
   DialogTrigger
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { chatbotService } from '@/services/api'
 import { toast } from 'vue-sonner'
 import { Plus, Pencil, Trash2, Workflow, ArrowLeft, Play, Pause, GripVertical, ChevronDown, ChevronUp } from 'lucide-vue-next'
@@ -80,6 +104,8 @@ const isDialogOpen = ref(false)
 const isSubmitting = ref(false)
 const editingFlow = ref<ChatbotFlow | null>(null)
 const expandedStep = ref<number | null>(null)
+const deleteDialogOpen = ref(false)
+const flowToDelete = ref<ChatbotFlow | null>(null)
 
 const defaultWebhookConfig: WebhookConfig = {
   url: '',
@@ -304,12 +330,19 @@ async function toggleFlow(flow: ChatbotFlow) {
   }
 }
 
-async function deleteFlow(flow: ChatbotFlow) {
-  if (!confirm(`Are you sure you want to delete "${flow.name}"?`)) return
+function openDeleteDialog(flow: ChatbotFlow) {
+  flowToDelete.value = flow
+  deleteDialogOpen.value = true
+}
+
+async function confirmDeleteFlow() {
+  if (!flowToDelete.value) return
 
   try {
-    await chatbotService.deleteFlow(flow.id)
+    await chatbotService.deleteFlow(flowToDelete.value.id)
     toast.success('Flow deleted')
+    deleteDialogOpen.value = false
+    flowToDelete.value = null
     await fetchFlows()
   } catch (error) {
     toast.error('Failed to delete flow')
@@ -432,13 +465,15 @@ function removeButton(step: FlowStep, index: number) {
                   <div class="space-y-4">
                     <div class="space-y-2">
                       <Label>On Flow Completion</Label>
-                      <select
-                        v-model="formData.on_complete_action"
-                        class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                      >
-                        <option value="none">No action</option>
-                        <option value="webhook">Send data to API/Webhook</option>
-                      </select>
+                      <Select v-model="formData.on_complete_action">
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select action" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No action</SelectItem>
+                          <SelectItem value="webhook">Send data to API/Webhook</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <!-- Webhook Configuration -->
@@ -450,14 +485,16 @@ function removeButton(step: FlowStep, index: number) {
                       <div class="grid grid-cols-4 gap-4">
                         <div class="space-y-2">
                           <Label>Method</Label>
-                          <select
-                            v-model="formData.completion_config.method"
-                            class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                          >
-                            <option v-for="method in httpMethods" :key="method" :value="method">
-                              {{ method }}
-                            </option>
-                          </select>
+                          <Select v-model="formData.completion_config.method">
+                            <SelectTrigger>
+                              <SelectValue placeholder="Method" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem v-for="method in httpMethods" :key="method" :value="method">
+                                {{ method }}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                         <div class="col-span-3 space-y-2">
                           <Label>Webhook URL *</Label>
@@ -565,14 +602,16 @@ function removeButton(step: FlowStep, index: number) {
                         <!-- Message Type Selector -->
                         <div class="space-y-2">
                           <Label>Message Source</Label>
-                          <select
-                            v-model="step.message_type"
-                            class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                          >
-                            <option v-for="type in messageTypes" :key="type.value" :value="type.value">
-                              {{ type.label }}
-                            </option>
-                          </select>
+                          <Select v-model="step.message_type">
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select message source" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem v-for="type in messageTypes" :key="type.value" :value="type.value">
+                                {{ type.label }}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
 
                         <!-- Static Message (for text type) -->
@@ -636,14 +675,16 @@ function removeButton(step: FlowStep, index: number) {
                           <div class="grid grid-cols-4 gap-4">
                             <div class="space-y-2">
                               <Label>Method</Label>
-                              <select
-                                v-model="step.api_config.method"
-                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                              >
-                                <option v-for="method in httpMethods" :key="method" :value="method">
-                                  {{ method }}
-                                </option>
-                              </select>
+                              <Select v-model="step.api_config.method">
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Method" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem v-for="method in httpMethods" :key="method" :value="method">
+                                    {{ method }}
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
                             </div>
                             <div class="col-span-3 space-y-2">
                               <Label>API URL *</Label>
@@ -687,14 +728,16 @@ function removeButton(step: FlowStep, index: number) {
                         <div class="grid grid-cols-2 gap-4">
                           <div class="space-y-2">
                             <Label>Expected Input Type</Label>
-                            <select
-                              v-model="step.input_type"
-                              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            >
-                              <option v-for="type in inputTypes" :key="type.value" :value="type.value">
-                                {{ type.label }}
-                              </option>
-                            </select>
+                            <Select v-model="step.input_type">
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select input type" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem v-for="type in inputTypes" :key="type.value" :value="type.value">
+                                  {{ type.label }}
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
                           </div>
                           <div class="space-y-2">
                             <Label>Validation Regex (optional)</Label>
@@ -719,11 +762,10 @@ function removeButton(step: FlowStep, index: number) {
 
                         <div class="flex items-center gap-4">
                           <div class="flex items-center gap-2">
-                            <input
+                            <Switch
                               :id="`retry-${index}`"
-                              type="checkbox"
-                              v-model="step.retry_on_invalid"
-                              class="h-4 w-4 rounded border-gray-300"
+                              :checked="step.retry_on_invalid"
+                              @update:checked="step.retry_on_invalid = $event"
                             />
                             <Label :for="`retry-${index}`">Retry on invalid input</Label>
                           </div>
@@ -758,6 +800,39 @@ function removeButton(step: FlowStep, index: number) {
     <!-- Flows List -->
     <ScrollArea class="flex-1">
       <div class="p-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <!-- Loading Skeleton -->
+        <template v-if="isLoading">
+          <Card v-for="i in 6" :key="i" class="flex flex-col">
+            <CardHeader>
+              <div class="flex items-start justify-between">
+                <div class="flex items-center gap-3">
+                  <Skeleton class="h-10 w-10 rounded-lg" />
+                  <div>
+                    <Skeleton class="h-5 w-32 mb-2" />
+                    <Skeleton class="h-5 w-16" />
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent class="flex-1">
+              <Skeleton class="h-4 w-full mb-3" />
+              <div class="flex gap-1 mb-3">
+                <Skeleton class="h-5 w-14" />
+                <Skeleton class="h-5 w-16" />
+              </div>
+              <Skeleton class="h-4 w-20" />
+            </CardContent>
+            <div class="p-4 pt-0 flex items-center justify-between border-t mt-auto">
+              <div class="flex gap-2">
+                <Skeleton class="h-8 w-8 rounded" />
+                <Skeleton class="h-8 w-8 rounded" />
+              </div>
+              <Skeleton class="h-8 w-20" />
+            </div>
+          </Card>
+        </template>
+
+        <template v-else>
         <Card v-for="flow in flows" :key="flow.id" class="flex flex-col">
           <CardHeader>
             <div class="flex items-start justify-between">
@@ -785,12 +860,22 @@ function removeButton(step: FlowStep, index: number) {
           </CardContent>
           <div class="p-4 pt-0 flex items-center justify-between border-t mt-auto">
             <div class="flex gap-2">
-              <Button variant="ghost" size="icon" @click="openEditDialog(flow)">
-                <Pencil class="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" @click="deleteFlow(flow)">
-                <Trash2 class="h-4 w-4 text-destructive" />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Button variant="ghost" size="icon" @click="openEditDialog(flow)">
+                    <Pencil class="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Edit flow</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Button variant="ghost" size="icon" @click="openDeleteDialog(flow)">
+                    <Trash2 class="h-4 w-4 text-destructive" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Delete flow</TooltipContent>
+              </Tooltip>
             </div>
             <Button
               :variant="flow.enabled ? 'outline' : 'default'"
@@ -814,7 +899,24 @@ function removeButton(step: FlowStep, index: number) {
             </Button>
           </CardContent>
         </Card>
+        </template>
       </div>
     </ScrollArea>
+
+    <!-- Delete Confirmation Dialog -->
+    <AlertDialog v-model:open="deleteDialogOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Flow</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to delete "{{ flowToDelete?.name }}"? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction @click="confirmDeleteFlow">Delete</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>

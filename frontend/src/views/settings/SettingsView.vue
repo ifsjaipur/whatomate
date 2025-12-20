@@ -7,6 +7,16 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
+import { Slider } from '@/components/ui/slider'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { toast } from 'vue-sonner'
 import { Settings, Bot, Bell, Shield, Loader2, Brain } from 'lucide-vue-next'
 import { chatbotService } from '@/services/api'
@@ -146,297 +156,309 @@ async function saveAISettings() {
 
     <!-- Content -->
     <ScrollArea class="flex-1">
-      <div class="p-6 space-y-6 max-w-3xl">
-        <!-- General Settings -->
-        <Card>
-          <CardHeader>
-            <CardTitle>General Settings</CardTitle>
-            <CardDescription>Basic organization and display settings</CardDescription>
-          </CardHeader>
-          <CardContent class="space-y-4">
-            <div class="space-y-2">
-              <Label for="org_name">Organization Name</Label>
-              <Input
-                id="org_name"
-                v-model="generalSettings.organization_name"
-                placeholder="Your Organization"
-              />
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-              <div class="space-y-2">
-                <Label for="timezone">Default Timezone</Label>
-                <select
-                  id="timezone"
-                  v-model="generalSettings.default_timezone"
-                  class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="UTC">UTC</option>
-                  <option value="America/New_York">Eastern Time</option>
-                  <option value="America/Los_Angeles">Pacific Time</option>
-                  <option value="Europe/London">London</option>
-                  <option value="Asia/Tokyo">Tokyo</option>
-                </select>
-              </div>
-              <div class="space-y-2">
-                <Label for="date_format">Date Format</Label>
-                <select
-                  id="date_format"
-                  v-model="generalSettings.date_format"
-                  class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-                  <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-                  <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-                </select>
-              </div>
-            </div>
-            <div class="flex justify-end">
-              <Button @click="saveGeneralSettings" :disabled="isSubmitting">
-                <Loader2 v-if="isSubmitting" class="mr-2 h-4 w-4 animate-spin" />
-                Save Changes
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+      <div class="p-6 max-w-3xl">
+        <Tabs default-value="general" class="w-full">
+          <TabsList class="grid w-full grid-cols-5 mb-6">
+            <TabsTrigger value="general">
+              <Settings class="h-4 w-4 mr-2" />
+              General
+            </TabsTrigger>
+            <TabsTrigger value="chatbot">
+              <Bot class="h-4 w-4 mr-2" />
+              Chatbot
+            </TabsTrigger>
+            <TabsTrigger value="ai">
+              <Brain class="h-4 w-4 mr-2" />
+              AI
+            </TabsTrigger>
+            <TabsTrigger value="notifications">
+              <Bell class="h-4 w-4 mr-2" />
+              Notifications
+            </TabsTrigger>
+            <TabsTrigger value="security">
+              <Shield class="h-4 w-4 mr-2" />
+              Security
+            </TabsTrigger>
+          </TabsList>
 
-        <!-- Chatbot Settings -->
-        <Card>
-          <CardHeader>
-            <div class="flex items-center gap-2">
-              <Bot class="h-5 w-5" />
-              <div>
+          <!-- General Settings Tab -->
+          <TabsContent value="general">
+            <Card>
+              <CardHeader>
+                <CardTitle>General Settings</CardTitle>
+                <CardDescription>Basic organization and display settings</CardDescription>
+              </CardHeader>
+              <CardContent class="space-y-4">
+                <div class="space-y-2">
+                  <Label for="org_name">Organization Name</Label>
+                  <Input
+                    id="org_name"
+                    v-model="generalSettings.organization_name"
+                    placeholder="Your Organization"
+                  />
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                  <div class="space-y-2">
+                    <Label for="timezone">Default Timezone</Label>
+                    <Select v-model="generalSettings.default_timezone">
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select timezone" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="UTC">UTC</SelectItem>
+                        <SelectItem value="America/New_York">Eastern Time</SelectItem>
+                        <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
+                        <SelectItem value="Europe/London">London</SelectItem>
+                        <SelectItem value="Asia/Tokyo">Tokyo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div class="space-y-2">
+                    <Label for="date_format">Date Format</Label>
+                    <Select v-model="generalSettings.date_format">
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select format" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
+                        <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
+                        <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div class="flex justify-end">
+                  <Button @click="saveGeneralSettings" :disabled="isSubmitting">
+                    <Loader2 v-if="isSubmitting" class="mr-2 h-4 w-4 animate-spin" />
+                    Save Changes
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <!-- Chatbot Settings Tab -->
+          <TabsContent value="chatbot">
+            <Card>
+              <CardHeader>
                 <CardTitle>Chatbot Settings</CardTitle>
                 <CardDescription>Configure default chatbot behavior</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent class="space-y-4">
-            <div class="space-y-2">
-              <Label for="greeting">Greeting Message</Label>
-              <Textarea
-                id="greeting"
-                v-model="chatbotSettings.greeting_message"
-                placeholder="Hello! How can I help you?"
-                :rows="2"
-              />
-            </div>
-            <div class="space-y-2">
-              <Label for="fallback">Fallback Message</Label>
-              <Textarea
-                id="fallback"
-                v-model="chatbotSettings.fallback_message"
-                placeholder="Sorry, I didn't understand that."
-                :rows="2"
-              />
-            </div>
-            <div class="space-y-2">
-              <Label for="transfer">Transfer Message</Label>
-              <Textarea
-                id="transfer"
-                v-model="chatbotSettings.transfer_message"
-                placeholder="Transferring you to a human agent..."
-                :rows="2"
-              />
-            </div>
-            <div class="space-y-2">
-              <Label for="timeout">Session Timeout (minutes)</Label>
-              <Input
-                id="timeout"
-                v-model.number="chatbotSettings.session_timeout_minutes"
-                type="number"
-                min="5"
-                max="120"
-              />
-            </div>
-            <div class="flex justify-end">
-              <Button @click="saveChatbotSettings" :disabled="isSubmitting">
-                <Loader2 v-if="isSubmitting" class="mr-2 h-4 w-4 animate-spin" />
-                Save Changes
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+              </CardHeader>
+              <CardContent class="space-y-4">
+                <div class="space-y-2">
+                  <Label for="greeting">Greeting Message</Label>
+                  <Textarea
+                    id="greeting"
+                    v-model="chatbotSettings.greeting_message"
+                    placeholder="Hello! How can I help you?"
+                    :rows="2"
+                  />
+                </div>
+                <div class="space-y-2">
+                  <Label for="fallback">Fallback Message</Label>
+                  <Textarea
+                    id="fallback"
+                    v-model="chatbotSettings.fallback_message"
+                    placeholder="Sorry, I didn't understand that."
+                    :rows="2"
+                  />
+                </div>
+                <div class="space-y-2">
+                  <Label for="transfer">Transfer Message</Label>
+                  <Textarea
+                    id="transfer"
+                    v-model="chatbotSettings.transfer_message"
+                    placeholder="Transferring you to a human agent..."
+                    :rows="2"
+                  />
+                </div>
+                <div class="space-y-2">
+                  <Label for="timeout">Session Timeout (minutes)</Label>
+                  <Input
+                    id="timeout"
+                    v-model.number="chatbotSettings.session_timeout_minutes"
+                    type="number"
+                    min="5"
+                    max="120"
+                  />
+                </div>
+                <div class="flex justify-end">
+                  <Button @click="saveChatbotSettings" :disabled="isSubmitting">
+                    <Loader2 v-if="isSubmitting" class="mr-2 h-4 w-4 animate-spin" />
+                    Save Changes
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        <!-- AI Settings -->
-        <Card>
-          <CardHeader>
-            <div class="flex items-center gap-2">
-              <Brain class="h-5 w-5" />
-              <div>
+          <!-- AI Settings Tab -->
+          <TabsContent value="ai">
+            <Card>
+              <CardHeader>
                 <CardTitle>AI Settings</CardTitle>
                 <CardDescription>Configure AI-powered responses for your chatbot</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent class="space-y-4">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="font-medium">Enable AI Responses</p>
-                <p class="text-sm text-muted-foreground">Use AI to generate responses when no flow matches</p>
-              </div>
-              <input
-                type="checkbox"
-                v-model="aiSettings.ai_enabled"
-                class="h-5 w-5 rounded"
-              />
-            </div>
-
-            <div v-if="aiSettings.ai_enabled" class="space-y-4 pt-2">
-              <Separator />
-
-              <div class="grid grid-cols-2 gap-4">
-                <div class="space-y-2">
-                  <Label for="ai_provider">AI Provider</Label>
-                  <select
-                    id="ai_provider"
-                    v-model="aiSettings.ai_provider"
-                    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="">Select provider...</option>
-                    <option v-for="provider in aiProviders" :key="provider.value" :value="provider.value">
-                      {{ provider.label }}
-                    </option>
-                  </select>
+              </CardHeader>
+              <CardContent class="space-y-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="font-medium">Enable AI Responses</p>
+                    <p class="text-sm text-muted-foreground">Use AI to generate responses when no flow matches</p>
+                  </div>
+                  <Switch
+                    :checked="aiSettings.ai_enabled"
+                    @update:checked="aiSettings.ai_enabled = $event"
+                  />
                 </div>
-                <div class="space-y-2">
-                  <Label for="ai_model">Model</Label>
-                  <select
-                    id="ai_model"
-                    v-model="aiSettings.ai_model"
-                    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    :disabled="!aiSettings.ai_provider"
-                  >
-                    <option value="">Select model...</option>
-                    <option v-for="model in availableModels" :key="model" :value="model">
-                      {{ model }}
-                    </option>
-                  </select>
+
+                <div v-if="aiSettings.ai_enabled" class="space-y-4 pt-2">
+                  <Separator />
+
+                  <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                      <Label for="ai_provider">AI Provider</Label>
+                      <Select v-model="aiSettings.ai_provider">
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select provider..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem v-for="provider in aiProviders" :key="provider.value" :value="provider.value">
+                            {{ provider.label }}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div class="space-y-2">
+                      <Label for="ai_model">Model</Label>
+                      <Select v-model="aiSettings.ai_model" :disabled="!aiSettings.ai_provider">
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select model..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem v-for="model in availableModels" :key="model" :value="model">
+                            {{ model }}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div class="space-y-2">
+                    <Label for="ai_api_key">API Key</Label>
+                    <Input
+                      id="ai_api_key"
+                      v-model="aiSettings.ai_api_key"
+                      type="password"
+                      placeholder="Enter API key (leave empty to keep existing)"
+                    />
+                    <p class="text-xs text-muted-foreground">Your API key is encrypted and stored securely</p>
+                  </div>
+
+                  <div class="space-y-2">
+                    <Label for="ai_max_tokens">Max Tokens</Label>
+                    <Input
+                      id="ai_max_tokens"
+                      v-model.number="aiSettings.ai_max_tokens"
+                      type="number"
+                      min="100"
+                      max="4000"
+                    />
+                    <p class="text-xs text-muted-foreground">Maximum number of tokens for AI responses (100-4000)</p>
+                  </div>
+
+                  <div class="space-y-2">
+                    <Label for="ai_system_prompt">System Prompt (optional)</Label>
+                    <Textarea
+                      id="ai_system_prompt"
+                      v-model="aiSettings.ai_system_prompt"
+                      placeholder="You are a helpful customer service assistant..."
+                      :rows="3"
+                    />
+                    <p class="text-xs text-muted-foreground">Instructions for the AI on how to respond</p>
+                  </div>
                 </div>
-              </div>
 
-              <div class="space-y-2">
-                <Label for="ai_api_key">API Key</Label>
-                <Input
-                  id="ai_api_key"
-                  v-model="aiSettings.ai_api_key"
-                  type="password"
-                  placeholder="Enter API key (leave empty to keep existing)"
-                />
-                <p class="text-xs text-muted-foreground">Your API key is encrypted and stored securely</p>
-              </div>
+                <div class="flex justify-end pt-2">
+                  <Button @click="saveAISettings" :disabled="isSubmitting">
+                    <Loader2 v-if="isSubmitting" class="mr-2 h-4 w-4 animate-spin" />
+                    Save Changes
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-              <div class="space-y-2">
-                <Label for="ai_max_tokens">Max Tokens</Label>
-                <Input
-                  id="ai_max_tokens"
-                  v-model.number="aiSettings.ai_max_tokens"
-                  type="number"
-                  min="100"
-                  max="4000"
-                />
-                <p class="text-xs text-muted-foreground">Maximum number of tokens for AI responses (100-4000)</p>
-              </div>
-
-              <div class="space-y-2">
-                <Label for="ai_system_prompt">System Prompt (optional)</Label>
-                <Textarea
-                  id="ai_system_prompt"
-                  v-model="aiSettings.ai_system_prompt"
-                  placeholder="You are a helpful customer service assistant..."
-                  :rows="3"
-                />
-                <p class="text-xs text-muted-foreground">Instructions for the AI on how to respond</p>
-              </div>
-            </div>
-
-            <div class="flex justify-end pt-2">
-              <Button @click="saveAISettings" :disabled="isSubmitting">
-                <Loader2 v-if="isSubmitting" class="mr-2 h-4 w-4 animate-spin" />
-                Save Changes
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <!-- Notification Settings -->
-        <Card>
-          <CardHeader>
-            <div class="flex items-center gap-2">
-              <Bell class="h-5 w-5" />
-              <div>
+          <!-- Notification Settings Tab -->
+          <TabsContent value="notifications">
+            <Card>
+              <CardHeader>
                 <CardTitle>Notifications</CardTitle>
                 <CardDescription>Manage how you receive notifications</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent class="space-y-4">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="font-medium">Email Notifications</p>
-                <p class="text-sm text-muted-foreground">Receive important updates via email</p>
-              </div>
-              <input
-                type="checkbox"
-                v-model="notificationSettings.email_notifications"
-                class="h-5 w-5 rounded"
-              />
-            </div>
-            <Separator />
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="font-medium">New Message Alerts</p>
-                <p class="text-sm text-muted-foreground">Get notified when new messages arrive</p>
-              </div>
-              <input
-                type="checkbox"
-                v-model="notificationSettings.new_message_alerts"
-                class="h-5 w-5 rounded"
-              />
-            </div>
-            <Separator />
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="font-medium">Campaign Updates</p>
-                <p class="text-sm text-muted-foreground">Receive campaign status notifications</p>
-              </div>
-              <input
-                type="checkbox"
-                v-model="notificationSettings.campaign_updates"
-                class="h-5 w-5 rounded"
-              />
-            </div>
-          </CardContent>
-        </Card>
+              </CardHeader>
+              <CardContent class="space-y-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="font-medium">Email Notifications</p>
+                    <p class="text-sm text-muted-foreground">Receive important updates via email</p>
+                  </div>
+                  <Switch
+                    :checked="notificationSettings.email_notifications"
+                    @update:checked="notificationSettings.email_notifications = $event"
+                  />
+                </div>
+                <Separator />
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="font-medium">New Message Alerts</p>
+                    <p class="text-sm text-muted-foreground">Get notified when new messages arrive</p>
+                  </div>
+                  <Switch
+                    :checked="notificationSettings.new_message_alerts"
+                    @update:checked="notificationSettings.new_message_alerts = $event"
+                  />
+                </div>
+                <Separator />
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="font-medium">Campaign Updates</p>
+                    <p class="text-sm text-muted-foreground">Receive campaign status notifications</p>
+                  </div>
+                  <Switch
+                    :checked="notificationSettings.campaign_updates"
+                    @update:checked="notificationSettings.campaign_updates = $event"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        <!-- Security -->
-        <Card>
-          <CardHeader>
-            <div class="flex items-center gap-2">
-              <Shield class="h-5 w-5" />
-              <div>
+          <!-- Security Tab -->
+          <TabsContent value="security">
+            <Card>
+              <CardHeader>
                 <CardTitle>Security</CardTitle>
                 <CardDescription>Manage your account security</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent class="space-y-4">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="font-medium">Change Password</p>
-                <p class="text-sm text-muted-foreground">Update your account password</p>
-              </div>
-              <Button variant="outline">Change Password</Button>
-            </div>
-            <Separator />
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="font-medium">Two-Factor Authentication</p>
-                <p class="text-sm text-muted-foreground">Add an extra layer of security</p>
-              </div>
-              <Button variant="outline">Enable 2FA</Button>
-            </div>
-          </CardContent>
-        </Card>
+              </CardHeader>
+              <CardContent class="space-y-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="font-medium">Change Password</p>
+                    <p class="text-sm text-muted-foreground">Update your account password</p>
+                  </div>
+                  <Button variant="outline">Change Password</Button>
+                </div>
+                <Separator />
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="font-medium">Two-Factor Authentication</p>
+                    <p class="text-sm text-muted-foreground">Add an extra layer of security</p>
+                  </div>
+                  <Button variant="outline">Enable 2FA</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </ScrollArea>
   </div>

@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -16,6 +18,36 @@ import {
   DialogTitle,
   DialogTrigger
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
 import { chatbotService } from '@/services/api'
 import { toast } from 'vue-sonner'
 import { Plus, Pencil, Trash2, Sparkles, ArrowLeft, FileText, Globe } from 'lucide-vue-next'
@@ -45,6 +77,8 @@ const isLoading = ref(true)
 const isDialogOpen = ref(false)
 const isSubmitting = ref(false)
 const editingContext = ref<AIContext | null>(null)
+const deleteDialogOpen = ref(false)
+const contextToDelete = ref<AIContext | null>(null)
 
 const formData = ref({
   name: '',
@@ -173,12 +207,19 @@ async function saveContext() {
   }
 }
 
-async function deleteContext(context: AIContext) {
-  if (!confirm(`Are you sure you want to delete "${context.name}"?`)) return
+function openDeleteDialog(context: AIContext) {
+  contextToDelete.value = context
+  deleteDialogOpen.value = true
+}
+
+async function confirmDeleteContext() {
+  if (!contextToDelete.value) return
 
   try {
-    await chatbotService.deleteAIContext(context.id)
+    await chatbotService.deleteAIContext(contextToDelete.value.id)
     toast.success('AI context deleted')
+    deleteDialogOpen.value = false
+    contextToDelete.value = null
     await fetchContexts()
   } catch (error) {
     toast.error('Failed to delete AI context')
@@ -228,14 +269,15 @@ async function deleteContext(context: AIContext) {
                 </div>
                 <div class="space-y-2">
                   <Label for="context_type">Type</Label>
-                  <select
-                    id="context_type"
-                    v-model="formData.context_type"
-                    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="static">Static Content</option>
-                    <option value="api">API Fetch</option>
-                  </select>
+                  <Select v-model="formData.context_type">
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="static">Static Content</SelectItem>
+                      <SelectItem value="api">API Fetch</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -275,14 +317,15 @@ async function deleteContext(context: AIContext) {
                 <div class="grid grid-cols-4 gap-4">
                   <div class="col-span-1 space-y-2">
                     <Label for="api_method">Method</Label>
-                    <select
-                      id="api_method"
-                      v-model="formData.api_method"
-                      class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    >
-                      <option value="GET">GET</option>
-                      <option value="POST">POST</option>
-                    </select>
+                    <Select v-model="formData.api_method">
+                      <SelectTrigger>
+                        <SelectValue placeholder="Method" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="GET">GET</SelectItem>
+                        <SelectItem value="POST">POST</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div class="col-span-3 space-y-2">
                     <Label for="api_url">API URL *</Label>
@@ -333,11 +376,10 @@ async function deleteContext(context: AIContext) {
                   <p class="text-xs text-muted-foreground">Higher priority contexts are used first</p>
                 </div>
                 <div class="flex items-center gap-2 pt-8">
-                  <input
+                  <Switch
                     id="enabled"
-                    v-model="formData.enabled"
-                    type="checkbox"
-                    class="h-4 w-4 rounded border-gray-300"
+                    :checked="formData.enabled"
+                    @update:checked="formData.enabled = $event"
                   />
                   <Label for="enabled">Enabled</Label>
                 </div>
@@ -357,6 +399,36 @@ async function deleteContext(context: AIContext) {
     <!-- Contexts List -->
     <ScrollArea class="flex-1">
       <div class="p-6 grid gap-4 md:grid-cols-2">
+        <!-- Loading Skeleton -->
+        <template v-if="isLoading">
+          <Card v-for="i in 4" :key="i">
+            <CardHeader>
+              <div class="flex items-start justify-between">
+                <div class="flex items-center gap-3">
+                  <Skeleton class="h-10 w-10 rounded-lg" />
+                  <div>
+                    <Skeleton class="h-5 w-32 mb-1" />
+                    <Skeleton class="h-4 w-24" />
+                  </div>
+                </div>
+                <Skeleton class="h-5 w-16" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div class="flex flex-wrap gap-1 mb-3">
+                <Skeleton class="h-5 w-12" />
+                <Skeleton class="h-5 w-16" />
+              </div>
+              <Skeleton class="h-5 w-24 mb-3" />
+              <div class="flex gap-2">
+                <Skeleton class="h-8 w-8 rounded" />
+                <Skeleton class="h-8 w-8 rounded" />
+              </div>
+            </CardContent>
+          </Card>
+        </template>
+
+        <template v-else>
         <Card v-for="context in contexts" :key="context.id">
           <CardHeader>
             <div class="flex items-start justify-between">
@@ -389,12 +461,22 @@ async function deleteContext(context: AIContext) {
             </div>
             <div class="flex items-center justify-between">
               <div class="flex gap-2">
-                <Button variant="ghost" size="icon" @click="openEditDialog(context)">
-                  <Pencil class="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" @click="deleteContext(context)">
-                  <Trash2 class="h-4 w-4 text-destructive" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button variant="ghost" size="icon" @click="openEditDialog(context)">
+                      <Pencil class="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Edit context</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button variant="ghost" size="icon" @click="openDeleteDialog(context)">
+                      <Trash2 class="h-4 w-4 text-destructive" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Delete context</TooltipContent>
+                </Tooltip>
               </div>
             </div>
           </CardContent>
@@ -411,7 +493,24 @@ async function deleteContext(context: AIContext) {
             </Button>
           </CardContent>
         </Card>
+        </template>
       </div>
     </ScrollArea>
+
+    <!-- Delete Confirmation Dialog -->
+    <AlertDialog v-model:open="deleteDialogOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete AI Context</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to delete "{{ contextToDelete?.name }}"? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction @click="confirmDeleteContext">Delete</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>

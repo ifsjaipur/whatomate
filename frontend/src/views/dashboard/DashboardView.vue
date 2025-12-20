@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Skeleton } from '@/components/ui/skeleton'
 import { analyticsService } from '@/services/api'
 import {
   MessageSquare,
@@ -150,32 +151,48 @@ onMounted(async () => {
       <div class="p-6 space-y-6">
         <!-- Stats Cards -->
         <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card v-for="card in statCards" :key="card.key">
-            <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle class="text-sm font-medium">
-                {{ card.title }}
-              </CardTitle>
-              <component :is="card.icon" :class="['h-5 w-5', card.color]" />
-            </CardHeader>
-            <CardContent>
-              <div class="text-2xl font-bold">
-                {{ formatNumber(stats[card.key as keyof DashboardStats] as number) }}
-              </div>
-              <div class="flex items-center text-xs text-muted-foreground mt-1">
-                <component
-                  :is="(stats[card.changeKey as keyof DashboardStats] as number) >= 0 ? TrendingUp : TrendingDown"
-                  :class="[
-                    'h-3 w-3 mr-1',
-                    (stats[card.changeKey as keyof DashboardStats] as number) >= 0 ? 'text-green-500' : 'text-red-500'
-                  ]"
-                />
-                <span :class="(stats[card.changeKey as keyof DashboardStats] as number) >= 0 ? 'text-green-500' : 'text-red-500'">
-                  {{ Math.abs(stats[card.changeKey as keyof DashboardStats] as number).toFixed(1) }}%
-                </span>
-                <span class="ml-1">from last month</span>
-              </div>
-            </CardContent>
-          </Card>
+          <!-- Skeleton Loading State -->
+          <template v-if="isLoading">
+            <Card v-for="i in 4" :key="i">
+              <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton class="h-4 w-24" />
+                <Skeleton class="h-5 w-5 rounded" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton class="h-8 w-20 mb-2" />
+                <Skeleton class="h-3 w-32" />
+              </CardContent>
+            </Card>
+          </template>
+          <!-- Actual Stats -->
+          <template v-else>
+            <Card v-for="card in statCards" :key="card.key">
+              <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle class="text-sm font-medium">
+                  {{ card.title }}
+                </CardTitle>
+                <component :is="card.icon" :class="['h-5 w-5', card.color]" />
+              </CardHeader>
+              <CardContent>
+                <div class="text-2xl font-bold">
+                  {{ formatNumber(stats[card.key as keyof DashboardStats] as number) }}
+                </div>
+                <div class="flex items-center text-xs text-muted-foreground mt-1">
+                  <component
+                    :is="(stats[card.changeKey as keyof DashboardStats] as number) >= 0 ? TrendingUp : TrendingDown"
+                    :class="[
+                      'h-3 w-3 mr-1',
+                      (stats[card.changeKey as keyof DashboardStats] as number) >= 0 ? 'text-green-500' : 'text-red-500'
+                    ]"
+                  />
+                  <span :class="(stats[card.changeKey as keyof DashboardStats] as number) >= 0 ? 'text-green-500' : 'text-red-500'">
+                    {{ Math.abs(stats[card.changeKey as keyof DashboardStats] as number).toFixed(1) }}%
+                  </span>
+                  <span class="ml-1">from last month</span>
+                </div>
+              </CardContent>
+            </Card>
+          </template>
         </div>
 
         <!-- Recent Activity -->

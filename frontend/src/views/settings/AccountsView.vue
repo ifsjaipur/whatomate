@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -15,6 +17,29 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
 import { api } from '@/services/api'
 import { toast } from 'vue-sonner'
 import {
@@ -69,6 +94,8 @@ const isSubmitting = ref(false)
 const editingAccount = ref<WhatsAppAccount | null>(null)
 const testingAccountId = ref<string | null>(null)
 const testResults = ref<Record<string, TestResult>>({})
+const deleteDialogOpen = ref(false)
+const accountToDelete = ref<WhatsAppAccount | null>(null)
 
 const formData = ref({
   name: '',
@@ -172,12 +199,19 @@ async function saveAccount() {
   }
 }
 
-async function deleteAccount(account: WhatsAppAccount) {
-  if (!confirm(`Are you sure you want to delete "${account.name}"? This action cannot be undone.`)) return
+function openDeleteDialog(account: WhatsAppAccount) {
+  accountToDelete.value = account
+  deleteDialogOpen.value = true
+}
+
+async function confirmDelete() {
+  if (!accountToDelete.value) return
 
   try {
-    await api.delete(`/accounts/${account.id}`)
+    await api.delete(`/accounts/${accountToDelete.value.id}`)
     toast.success('Account deleted')
+    deleteDialogOpen.value = false
+    accountToDelete.value = null
     await fetchAccounts()
   } catch (error: any) {
     const message = error.response?.data?.message || 'Failed to delete account'
@@ -232,13 +266,19 @@ const webhookUrl = window.location.origin + '/api/webhook'
     <header class="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div class="flex h-16 items-center justify-between px-6">
         <div class="flex items-center gap-4">
-          <RouterLink to="/settings">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft class="h-5 w-5" />
-            </Button>
-          </RouterLink>
           <div>
-            <h1 class="text-xl font-semibold">WhatsApp Accounts</h1>
+            <Breadcrumb>
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <BreadcrumbLink href="/settings">Settings</BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  <BreadcrumbPage>Accounts</BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+            <h1 class="text-xl font-semibold mt-1">WhatsApp Accounts</h1>
             <p class="text-sm text-muted-foreground">Manage your WhatsApp Business API connections</p>
           </div>
         </div>
@@ -250,9 +290,30 @@ const webhookUrl = window.location.origin + '/api/webhook'
     </header>
 
     <!-- Loading State -->
-    <div v-if="isLoading" class="flex-1 flex items-center justify-center">
-      <Loader2 class="h-8 w-8 animate-spin text-muted-foreground" />
-    </div>
+    <ScrollArea v-if="isLoading" class="flex-1">
+      <div class="p-6 space-y-4 max-w-4xl mx-auto">
+        <Card v-for="i in 3" :key="i">
+          <CardContent class="p-6">
+            <div class="flex items-start gap-4">
+              <Skeleton class="h-12 w-12 rounded-full" />
+              <div class="flex-1 space-y-3">
+                <Skeleton class="h-5 w-48" />
+                <div class="grid grid-cols-2 gap-2">
+                  <Skeleton class="h-4 w-32" />
+                  <Skeleton class="h-4 w-32" />
+                  <Skeleton class="h-4 w-32" />
+                  <Skeleton class="h-4 w-32" />
+                </div>
+                <div class="flex gap-2">
+                  <Skeleton class="h-6 w-24 rounded-full" />
+                  <Skeleton class="h-6 w-24 rounded-full" />
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </ScrollArea>
 
     <!-- Accounts List -->
     <ScrollArea v-else class="flex-1">
@@ -381,12 +442,22 @@ const webhookUrl = window.location.origin + '/api/webhook'
                   <RefreshCw v-else class="h-4 w-4" />
                   <span class="ml-1">Test</span>
                 </Button>
-                <Button variant="ghost" size="icon" @click="openEditDialog(account)">
-                  <Pencil class="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" @click="deleteAccount(account)">
-                  <Trash2 class="h-4 w-4 text-destructive" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button variant="ghost" size="icon" @click="openEditDialog(account)">
+                      <Pencil class="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Edit account</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button variant="ghost" size="icon" @click="openDeleteDialog(account)">
+                      <Trash2 class="h-4 w-4 text-destructive" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Delete account</TooltipContent>
+                </Tooltip>
               </div>
             </div>
           </CardContent>
@@ -530,40 +601,37 @@ const webhookUrl = window.location.origin + '/api/webhook'
 
           <Separator />
 
-          <div class="space-y-3">
+          <div class="space-y-4">
             <Label>Options</Label>
-            <div class="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="is_default_incoming"
-                v-model="formData.is_default_incoming"
-                class="rounded border-gray-300"
-              />
+            <div class="flex items-center justify-between">
               <Label for="is_default_incoming" class="font-normal cursor-pointer">
                 Default for incoming messages
               </Label>
-            </div>
-            <div class="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="is_default_outgoing"
-                v-model="formData.is_default_outgoing"
-                class="rounded border-gray-300"
+              <Switch
+                id="is_default_incoming"
+                :checked="formData.is_default_incoming"
+                @update:checked="formData.is_default_incoming = $event"
               />
+            </div>
+            <div class="flex items-center justify-between">
               <Label for="is_default_outgoing" class="font-normal cursor-pointer">
                 Default for outgoing messages
               </Label>
-            </div>
-            <div class="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="auto_read_receipt"
-                v-model="formData.auto_read_receipt"
-                class="rounded border-gray-300"
+              <Switch
+                id="is_default_outgoing"
+                :checked="formData.is_default_outgoing"
+                @update:checked="formData.is_default_outgoing = $event"
               />
+            </div>
+            <div class="flex items-center justify-between">
               <Label for="auto_read_receipt" class="font-normal cursor-pointer">
                 Automatically send read receipts
               </Label>
+              <Switch
+                id="auto_read_receipt"
+                :checked="formData.auto_read_receipt"
+                @update:checked="formData.auto_read_receipt = $event"
+              />
             </div>
           </div>
         </div>
@@ -577,5 +645,23 @@ const webhookUrl = window.location.origin + '/api/webhook'
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <!-- Delete Confirmation Dialog -->
+    <AlertDialog v-model:open="deleteDialogOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Account</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to delete "{{ accountToDelete?.name }}"? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction @click="confirmDelete" class="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>

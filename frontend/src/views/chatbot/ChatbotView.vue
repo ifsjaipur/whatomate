@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Skeleton } from '@/components/ui/skeleton'
 import { chatbotService } from '@/services/api'
 import { toast } from 'vue-sonner'
 import {
@@ -129,17 +130,32 @@ const statCards = [
       <div class="p-6 space-y-6">
         <!-- Stats -->
         <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card v-for="card in statCards" :key="card.key">
-            <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle class="text-sm font-medium">{{ card.title }}</CardTitle>
-              <component :is="card.icon" :class="['h-5 w-5', card.color]" />
-            </CardHeader>
-            <CardContent>
-              <div class="text-2xl font-bold">
-                {{ stats[card.key as keyof Stats].toLocaleString() }}
-              </div>
-            </CardContent>
-          </Card>
+          <!-- Skeleton Loading State -->
+          <template v-if="isLoading">
+            <Card v-for="i in 4" :key="i">
+              <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton class="h-4 w-24" />
+                <Skeleton class="h-5 w-5 rounded" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton class="h-8 w-16" />
+              </CardContent>
+            </Card>
+          </template>
+          <!-- Actual Stats -->
+          <template v-else>
+            <Card v-for="card in statCards" :key="card.key">
+              <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle class="text-sm font-medium">{{ card.title }}</CardTitle>
+                <component :is="card.icon" :class="['h-5 w-5', card.color]" />
+              </CardHeader>
+              <CardContent>
+                <div class="text-2xl font-bold">
+                  {{ stats[card.key as keyof Stats].toLocaleString() }}
+                </div>
+              </CardContent>
+            </Card>
+          </template>
         </div>
 
         <!-- Quick Actions -->
