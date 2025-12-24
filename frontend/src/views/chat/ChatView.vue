@@ -21,6 +21,13 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import EmojiPicker from 'vue3-emoji-picker'
+import 'vue3-emoji-picker/css'
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -88,6 +95,9 @@ const mediaLoadingStates = ref<Record<string, boolean>>({})
 // Canned responses slash command state
 const cannedPickerOpen = ref(false)
 const cannedSearchQuery = ref('')
+
+// Emoji picker state
+const emojiPickerOpen = ref(false)
 
 const contactId = computed(() => route.params.contactId as string | undefined)
 
@@ -187,19 +197,31 @@ async function selectContact(id: string) {
     wsService.setCurrentContact(id)
     // Load media for messages after messages are fetched
     await nextTick()
-    loadMediaForMessages()
+    try {
+      loadMediaForMessages()
+    } catch (e) {
+      console.error('Error loading media:', e)
+    }
   }
 }
 
 // Watch for new messages to auto-scroll and load media
 watch(() => contactsStore.messages.length, () => {
   scrollToBottom()
-  loadMediaForMessages()
+  try {
+    loadMediaForMessages()
+  } catch (e) {
+    console.error('Error loading media:', e)
+  }
 })
 
 // Watch for messages changes to load media
 watch(() => contactsStore.messages, () => {
-  loadMediaForMessages()
+  try {
+    loadMediaForMessages()
+  } catch (e) {
+    console.error('Error loading media:', e)
+  }
 }, { deep: true })
 
 function handleContactClick(contact: Contact) {
@@ -235,6 +257,11 @@ function insertCannedResponse(content: string) {
 function closeCannedPicker() {
   cannedPickerOpen.value = false
   cannedSearchQuery.value = ''
+}
+
+function insertEmoji(emoji: string) {
+  messageInput.value += emoji
+  emojiPickerOpen.value = false
 }
 
 // Watch for slash commands in message input
@@ -469,10 +496,15 @@ async function loadMediaForMessage(message: Message) {
 
 // Load media for all messages that have media_url
 function loadMediaForMessages() {
-  for (const message of contactsStore.messages) {
-    if (message.media_url && !mediaBlobUrls.value[message.id]) {
-      loadMediaForMessage(message)
+  try {
+    for (const message of contactsStore.messages) {
+      if (message.media_url && !mediaBlobUrls.value[message.id]) {
+        // Fire and forget - errors are handled inside loadMediaForMessage
+        loadMediaForMessage(message).catch(() => {})
+      }
     }
+  } catch (e) {
+    console.error('Error in loadMediaForMessages:', e)
   }
 }
 
@@ -906,21 +938,36 @@ async function sendMediaMessage() {
             <div class="flex gap-1">
               <Tooltip>
                 <TooltipTrigger as-child>
-                  <Button type="button" variant="ghost" size="icon">
-                    <Smile class="h-5 w-5" />
-                  </Button>
+                  <span>
+                    <Popover v-model:open="emojiPickerOpen">
+                      <PopoverTrigger as-child>
+                        <Button type="button" variant="ghost" size="icon">
+                          <Smile class="h-5 w-5" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent side="top" align="start" class="w-auto p-0">
+                        <EmojiPicker
+                          :native="true"
+                          :disable-skin-tones="true"
+                          @select="insertEmoji($event.i)"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </span>
                 </TooltipTrigger>
                 <TooltipContent>Emoji</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger as-child>
-                  <CannedResponsePicker
-                    :contact="contactsStore.currentContact"
-                    :external-open="cannedPickerOpen"
-                    :external-search="cannedSearchQuery"
-                    @select="insertCannedResponse"
-                    @close="closeCannedPicker"
-                  />
+                  <span>
+                    <CannedResponsePicker
+                      :contact="contactsStore.currentContact"
+                      :external-open="cannedPickerOpen"
+                      :external-search="cannedSearchQuery"
+                      @select="insertCannedResponse"
+                      @close="closeCannedPicker"
+                    />
+                  </span>
                 </TooltipTrigger>
                 <TooltipContent>Canned Responses</TooltipContent>
               </Tooltip>

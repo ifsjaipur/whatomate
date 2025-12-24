@@ -28,9 +28,9 @@ const isLoading = ref(false)
 const searchQuery = ref('')
 const responses = ref<CannedResponse[]>([])
 
-// Sync external open state
+// Sync external open state - use external if true, otherwise use internal
 const isOpen = computed({
-  get: () => props.externalOpen ?? internalOpen.value,
+  get: () => props.externalOpen || internalOpen.value,
   set: (val) => {
     internalOpen.value = val
     if (!val) {
@@ -124,7 +124,7 @@ function selectResponse(response: CannedResponse) {
 <template>
   <Popover v-model:open="isOpen">
     <PopoverTrigger as-child>
-      <Button type="button" variant="ghost" size="icon" title="Canned Responses">
+      <Button type="button" variant="ghost" size="icon">
         <MessageSquareText class="h-5 w-5" />
       </Button>
     </PopoverTrigger>
