@@ -198,6 +198,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 			// Agent-accessible exceptions under restricted prefixes
 			agentAllowedPaths := []string{
 				"/api/chatbot/transfers",
+				"/api/analytics/agents",
 			}
 
 			isAllowed := false
@@ -362,6 +363,9 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.GET("/api/analytics/dashboard", app.GetDashboardStats)
 	g.GET("/api/analytics/messages", app.GetMessageAnalytics)
 	g.GET("/api/analytics/chatbot", app.GetChatbotAnalytics)
+	g.GET("/api/analytics/agents", app.GetAgentAnalytics)
+	g.GET("/api/analytics/agents/{id}", app.GetAgentDetails)
+	g.GET("/api/analytics/agents/comparison", app.GetAgentComparison)
 
 	// Organization Settings
 	g.GET("/api/org/settings", app.GetOrganizationSettings)

@@ -31,7 +31,8 @@ import {
   Sun,
   Moon,
   Monitor,
-  Webhook
+  Webhook,
+  BarChart3
 } from 'lucide-vue-next'
 import { useColorMode } from '@/composables/useColorMode'
 import { getInitials } from '@/lib/utils'
@@ -74,6 +75,12 @@ const allNavItems = [
     name: 'Transfers',
     path: '/chatbot/transfers',
     icon: UserX,
+    roles: ['admin', 'manager', 'agent']
+  },
+  {
+    name: 'Agent Analytics',
+    path: '/analytics/agents',
+    icon: BarChart3,
     roles: ['admin', 'manager', 'agent']
   },
   {

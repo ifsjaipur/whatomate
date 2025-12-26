@@ -209,7 +209,9 @@ func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextM
 		return
 	}
 	if !settings.IsEnabled {
-		a.Log.Debug("Chatbot not enabled for this account", "account", account.Name, "settings_id", settings.ID)
+		a.Log.Debug("Chatbot not enabled for this account, creating transfer for agent queue", "account", account.Name, "settings_id", settings.ID)
+		// Create transfer to agent queue when chatbot is disabled
+		a.createTransferToQueue(&account, contact, "chatbot_disabled")
 		return
 	}
 	a.Log.Info("Chatbot settings loaded", "settings_id", settings.ID, "is_enabled", settings.IsEnabled, "ai_enabled", settings.AIEnabled, "ai_provider", settings.AIProvider, "default_response", settings.DefaultResponse)

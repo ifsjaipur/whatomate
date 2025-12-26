@@ -1,0 +1,406 @@
+package handlers
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/shridarpatil/whatomate/internal/models"
+	"github.com/valyala/fasthttp"
+	"github.com/zerodha/fastglue"
+)
+
+// AgentAnalyticsSummary represents overall agent analytics
+type AgentAnalyticsSummary struct {
+	TotalTransfersHandled int64            `json:"total_transfers_handled"`
+	ActiveTransfers       int64            `json:"active_transfers"`
+	AvgQueueTimeMins      float64          `json:"avg_queue_time_mins"`
+	AvgFirstResponseMins  float64          `json:"avg_first_response_mins"`
+	AvgResolutionMins     float64          `json:"avg_resolution_mins"`
+	TransfersBySource     map[string]int64 `json:"transfers_by_source"`
+}
+
+// AgentPerformanceStats represents performance metrics for an agent
+type AgentPerformanceStats struct {
+	AgentID              string  `json:"agent_id"`
+	AgentName            string  `json:"agent_name"`
+	AvgFirstResponseMins float64 `json:"avg_first_response_mins"`
+	AvgResolutionMins    float64 `json:"avg_resolution_mins"`
+	TransfersHandled     int64   `json:"transfers_handled"`
+	ActiveTransfers      int64   `json:"active_transfers"`
+	MessagesSent         int64   `json:"messages_sent"`
+}
+
+// TrendPoint represents a data point for time-series charts
+type TrendPoint struct {
+	Date             string  `json:"date"`
+	TransfersHandled int64   `json:"transfers_handled"`
+	AvgResponseMins  float64 `json:"avg_response_mins"`
+}
+
+// AgentAnalyticsResponse is the full API response
+type AgentAnalyticsResponse struct {
+	Summary    AgentAnalyticsSummary   `json:"summary"`
+	AgentStats []AgentPerformanceStats `json:"agent_stats,omitempty"`
+	TrendData  []TrendPoint            `json:"trend_data"`
+	MyStats    *AgentPerformanceStats  `json:"my_stats,omitempty"`
+}
+
+// GetAgentAnalytics returns agent analytics for the organization
+// Agents see only their own stats; Admin/Manager see all agents
+func (a *App) GetAgentAnalytics(r *fastglue.Request) error {
+	orgID, err := a.getOrgIDFromContext(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+
+	userID, _ := r.RequestCtx.UserValue("user_id").(uuid.UUID)
+	role, _ := r.RequestCtx.UserValue("role").(string)
+
+	// Parse date range
+	fromStr := string(r.RequestCtx.QueryArgs().Peek("from"))
+	toStr := string(r.RequestCtx.QueryArgs().Peek("to"))
+	groupBy := string(r.RequestCtx.QueryArgs().Peek("group_by"))
+	agentIDStr := string(r.RequestCtx.QueryArgs().Peek("agent_id"))
+	if groupBy == "" {
+		groupBy = "day"
+	}
+
+	now := time.Now()
+	var periodStart, periodEnd time.Time
+
+	if fromStr != "" && toStr != "" {
+		periodStart, err = time.Parse("2006-01-02", fromStr)
+		if err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid 'from' date format. Use YYYY-MM-DD", nil, "")
+		}
+		periodEnd, err = time.Parse("2006-01-02", toStr)
+		if err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid 'to' date format. Use YYYY-MM-DD", nil, "")
+		}
+		periodEnd = periodEnd.Add(24*time.Hour - time.Nanosecond)
+	} else {
+		// Default to current month
+		periodStart = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+		periodEnd = now
+	}
+
+	response := AgentAnalyticsResponse{
+		Summary: AgentAnalyticsSummary{
+			TransfersBySource: make(map[string]int64),
+		},
+		TrendData: []TrendPoint{},
+	}
+
+	// Check if filtering by specific agent (admin/manager only)
+	var filterAgentID *uuid.UUID
+	if role != "agent" && agentIDStr != "" {
+		parsedID, err := uuid.Parse(agentIDStr)
+		if err == nil {
+			filterAgentID = &parsedID
+		}
+	}
+
+	if filterAgentID != nil {
+		// Admin/Manager viewing specific agent
+		agentStats := a.calculateAgentStats(orgID, *filterAgentID, periodStart, periodEnd)
+		response.MyStats = &agentStats
+		response.TrendData = a.calculateTrendData(orgID, periodStart, periodEnd, groupBy, filterAgentID)
+		// Calculate summary for this specific agent
+		a.calculateAgentSummaryStats(orgID, *filterAgentID, periodStart, periodEnd, &response.Summary)
+	} else if role == "agent" {
+		// Agents only see their own stats
+		myStats := a.calculateAgentStats(orgID, userID, periodStart, periodEnd)
+		response.MyStats = &myStats
+		response.TrendData = a.calculateTrendData(orgID, periodStart, periodEnd, groupBy, &userID)
+		a.calculateAgentSummaryStats(orgID, userID, periodStart, periodEnd, &response.Summary)
+	} else {
+		// Admin/Manager see all agents
+		a.calculateSummaryStats(orgID, periodStart, periodEnd, &response.Summary)
+		response.TrendData = a.calculateTrendData(orgID, periodStart, periodEnd, groupBy, nil)
+		response.AgentStats = a.calculateAllAgentStats(orgID, periodStart, periodEnd)
+	}
+
+	return r.SendEnvelope(response)
+}
+
+// GetAgentDetails returns detailed analytics for a specific agent
+func (a *App) GetAgentDetails(r *fastglue.Request) error {
+	orgID, err := a.getOrgIDFromContext(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+
+	role, _ := r.RequestCtx.UserValue("role").(string)
+	if role == "agent" {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Access denied", nil, "")
+	}
+
+	agentIDStr := r.RequestCtx.UserValue("id").(string)
+	agentID, err := uuid.Parse(agentIDStr)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid agent ID", nil, "")
+	}
+
+	// Parse date range
+	fromStr := string(r.RequestCtx.QueryArgs().Peek("from"))
+	toStr := string(r.RequestCtx.QueryArgs().Peek("to"))
+	groupBy := string(r.RequestCtx.QueryArgs().Peek("group_by"))
+	if groupBy == "" {
+		groupBy = "day"
+	}
+
+	now := time.Now()
+	var periodStart, periodEnd time.Time
+
+	if fromStr != "" && toStr != "" {
+		periodStart, _ = time.Parse("2006-01-02", fromStr)
+		periodEnd, _ = time.Parse("2006-01-02", toStr)
+		periodEnd = periodEnd.Add(24*time.Hour - time.Nanosecond)
+	} else {
+		periodStart = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+		periodEnd = now
+	}
+
+	// Verify agent exists
+	var agent models.User
+	if err := a.DB.Where("id = ? AND organization_id = ?", agentID, orgID).First(&agent).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent not found", nil, "")
+	}
+
+	stats := a.calculateAgentStats(orgID, agentID, periodStart, periodEnd)
+	trendData := a.calculateTrendData(orgID, periodStart, periodEnd, groupBy, &agentID)
+
+	return r.SendEnvelope(map[string]any{
+		"agent":      stats,
+		"trend_data": trendData,
+	})
+}
+
+// GetAgentComparison returns comparison data for multiple agents
+func (a *App) GetAgentComparison(r *fastglue.Request) error {
+	orgID, err := a.getOrgIDFromContext(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+
+	role, _ := r.RequestCtx.UserValue("role").(string)
+	if role == "agent" {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Access denied", nil, "")
+	}
+
+	// Parse date range
+	fromStr := string(r.RequestCtx.QueryArgs().Peek("from"))
+	toStr := string(r.RequestCtx.QueryArgs().Peek("to"))
+
+	now := time.Now()
+	var periodStart, periodEnd time.Time
+
+	if fromStr != "" && toStr != "" {
+		periodStart, _ = time.Parse("2006-01-02", fromStr)
+		periodEnd, _ = time.Parse("2006-01-02", toStr)
+		periodEnd = periodEnd.Add(24*time.Hour - time.Nanosecond)
+	} else {
+		periodStart = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+		periodEnd = now
+	}
+
+	agentStats := a.calculateAllAgentStats(orgID, periodStart, periodEnd)
+
+	return r.SendEnvelope(map[string]any{
+		"agents": agentStats,
+	})
+}
+
+// Helper functions
+
+func (a *App) calculateSummaryStats(orgID uuid.UUID, start, end time.Time, summary *AgentAnalyticsSummary) {
+	// Total transfers handled (resumed)
+	a.DB.Model(&models.AgentTransfer{}).
+		Where("organization_id = ? AND status = ? AND transferred_at >= ? AND transferred_at <= ?",
+			orgID, "resumed", start, end).
+		Count(&summary.TotalTransfersHandled)
+
+	// Active transfers
+	a.DB.Model(&models.AgentTransfer{}).
+		Where("organization_id = ? AND status = ?", orgID, "active").
+		Count(&summary.ActiveTransfers)
+
+	// Average queue time (time from transfer to assignment for assigned transfers)
+	type AvgResult struct {
+		Avg float64
+	}
+	var queueTimeResult AvgResult
+	a.DB.Model(&models.AgentTransfer{}).
+		Select("AVG(EXTRACT(EPOCH FROM (updated_at - transferred_at))/60) as avg").
+		Where("organization_id = ? AND agent_id IS NOT NULL AND transferred_at >= ? AND transferred_at <= ?",
+			orgID, start, end).
+		Scan(&queueTimeResult)
+	summary.AvgQueueTimeMins = queueTimeResult.Avg
+
+	// Average resolution time (time from transfer to resume)
+	var resolutionTimeResult AvgResult
+	a.DB.Model(&models.AgentTransfer{}).
+		Select("AVG(EXTRACT(EPOCH FROM (resumed_at - transferred_at))/60) as avg").
+		Where("organization_id = ? AND status = ? AND resumed_at IS NOT NULL AND transferred_at >= ? AND transferred_at <= ?",
+			orgID, "resumed", start, end).
+		Scan(&resolutionTimeResult)
+	summary.AvgResolutionMins = resolutionTimeResult.Avg
+
+	// Transfers by source
+	type SourceCount struct {
+		Source string
+		Count  int64
+	}
+	var sourceCounts []SourceCount
+	a.DB.Model(&models.AgentTransfer{}).
+		Select("source, COUNT(*) as count").
+		Where("organization_id = ? AND transferred_at >= ? AND transferred_at <= ?", orgID, start, end).
+		Group("source").
+		Scan(&sourceCounts)
+
+	for _, sc := range sourceCounts {
+		summary.TransfersBySource[sc.Source] = sc.Count
+	}
+}
+
+func (a *App) calculateAgentSummaryStats(orgID, agentID uuid.UUID, start, end time.Time, summary *AgentAnalyticsSummary) {
+	// Total transfers handled by this agent (resumed)
+	a.DB.Model(&models.AgentTransfer{}).
+		Where("organization_id = ? AND agent_id = ? AND status = ? AND transferred_at >= ? AND transferred_at <= ?",
+			orgID, agentID, "resumed", start, end).
+		Count(&summary.TotalTransfersHandled)
+
+	// Active transfers for this agent
+	a.DB.Model(&models.AgentTransfer{}).
+		Where("organization_id = ? AND agent_id = ? AND status = ?", orgID, agentID, "active").
+		Count(&summary.ActiveTransfers)
+
+	// Average resolution time for this agent
+	type AvgResult struct {
+		Avg float64
+	}
+	var resolutionTimeResult AvgResult
+	a.DB.Model(&models.AgentTransfer{}).
+		Select("AVG(EXTRACT(EPOCH FROM (resumed_at - transferred_at))/60) as avg").
+		Where("organization_id = ? AND agent_id = ? AND status = ? AND resumed_at IS NOT NULL AND transferred_at >= ? AND transferred_at <= ?",
+			orgID, agentID, "resumed", start, end).
+		Scan(&resolutionTimeResult)
+	summary.AvgResolutionMins = resolutionTimeResult.Avg
+
+	// Transfers by source for this agent
+	type SourceCount struct {
+		Source string
+		Count  int64
+	}
+	var sourceCounts []SourceCount
+	a.DB.Model(&models.AgentTransfer{}).
+		Select("source, COUNT(*) as count").
+		Where("organization_id = ? AND agent_id = ? AND transferred_at >= ? AND transferred_at <= ?", orgID, agentID, start, end).
+		Group("source").
+		Scan(&sourceCounts)
+
+	for _, sc := range sourceCounts {
+		summary.TransfersBySource[sc.Source] = sc.Count
+	}
+}
+
+func (a *App) calculateAgentStats(orgID, agentID uuid.UUID, start, end time.Time) AgentPerformanceStats {
+	stats := AgentPerformanceStats{
+		AgentID: agentID.String(),
+	}
+
+	// Get agent name
+	var agent models.User
+	if a.DB.Where("id = ?", agentID).First(&agent).Error == nil {
+		stats.AgentName = agent.FullName
+	}
+
+	// Transfers handled (resumed)
+	a.DB.Model(&models.AgentTransfer{}).
+		Where("organization_id = ? AND agent_id = ? AND status = ? AND transferred_at >= ? AND transferred_at <= ?",
+			orgID, agentID, "resumed", start, end).
+		Count(&stats.TransfersHandled)
+
+	// Active transfers
+	a.DB.Model(&models.AgentTransfer{}).
+		Where("organization_id = ? AND agent_id = ? AND status = ?", orgID, agentID, "active").
+		Count(&stats.ActiveTransfers)
+
+	// Messages sent - count outgoing messages to contacts during agent's active transfers
+	// This captures all messages sent while the agent was handling the conversation
+	a.DB.Model(&models.Message{}).
+		Where("organization_id = ? AND direction = ? AND created_at >= ? AND created_at <= ?", orgID, "outgoing", start, end).
+		Where("contact_id IN (SELECT contact_id FROM agent_transfers WHERE agent_id = ? AND organization_id = ?)", agentID, orgID).
+		Count(&stats.MessagesSent)
+
+	// Average resolution time
+	type AvgResult struct {
+		Avg float64
+	}
+	var resolutionTimeResult AvgResult
+	a.DB.Model(&models.AgentTransfer{}).
+		Select("AVG(EXTRACT(EPOCH FROM (resumed_at - transferred_at))/60) as avg").
+		Where("organization_id = ? AND agent_id = ? AND status = ? AND resumed_at IS NOT NULL AND transferred_at >= ? AND transferred_at <= ?",
+			orgID, agentID, "resumed", start, end).
+		Scan(&resolutionTimeResult)
+	stats.AvgResolutionMins = resolutionTimeResult.Avg
+
+	return stats
+}
+
+func (a *App) calculateAllAgentStats(orgID uuid.UUID, start, end time.Time) []AgentPerformanceStats {
+	// Get all agents in the organization
+	var agents []models.User
+	a.DB.Where("organization_id = ? AND role = ?", orgID, "agent").Find(&agents)
+
+	stats := make([]AgentPerformanceStats, 0, len(agents))
+	for _, agent := range agents {
+		agentStats := a.calculateAgentStats(orgID, agent.ID, start, end)
+		stats = append(stats, agentStats)
+	}
+
+	return stats
+}
+
+func (a *App) calculateTrendData(orgID uuid.UUID, start, end time.Time, groupBy string, agentID *uuid.UUID) []TrendPoint {
+	var dateFormat string
+	var dateTrunc string
+
+	switch groupBy {
+	case "week":
+		dateFormat = "2006-01-02"
+		dateTrunc = "week"
+	default: // day
+		dateFormat = "2006-01-02"
+		dateTrunc = "day"
+	}
+
+	type TrendResult struct {
+		Date  time.Time
+		Count int64
+	}
+
+	query := a.DB.Model(&models.AgentTransfer{}).
+		Select("DATE_TRUNC('" + dateTrunc + "', transferred_at) as date, COUNT(*) as count").
+		Where("organization_id = ? AND status = ? AND transferred_at >= ? AND transferred_at <= ?",
+			orgID, "resumed", start, end)
+
+	if agentID != nil {
+		query = query.Where("agent_id = ?", *agentID)
+	}
+
+	var results []TrendResult
+	query.Group("DATE_TRUNC('" + dateTrunc + "', transferred_at)").
+		Order("date ASC").
+		Scan(&results)
+
+	trendData := make([]TrendPoint, len(results))
+	for i, r := range results {
+		trendData[i] = TrendPoint{
+			Date:             r.Date.Format(dateFormat),
+			TransfersHandled: r.Count,
+		}
+	}
+
+	return trendData
+}

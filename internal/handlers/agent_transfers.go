@@ -621,6 +621,43 @@ func (a *App) broadcastTransferAssigned(transfer *models.AgentTransfer) {
 	})
 }
 
+// createTransferToQueue creates an unassigned agent transfer that goes to the queue
+func (a *App) createTransferToQueue(account *models.WhatsAppAccount, contact *models.Contact, source string) {
+	// Check for existing active transfer
+	var existingCount int64
+	a.DB.Model(&models.AgentTransfer{}).
+		Where("organization_id = ? AND contact_id = ? AND status = ?", account.OrganizationID, contact.ID, "active").
+		Count(&existingCount)
+
+	if existingCount > 0 {
+		a.Log.Debug("Contact already has active transfer, skipping", "contact_id", contact.ID, "source", source)
+		return
+	}
+
+	// Create unassigned transfer (goes to queue)
+	transfer := models.AgentTransfer{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  account.OrganizationID,
+		ContactID:       contact.ID,
+		WhatsAppAccount: account.Name,
+		PhoneNumber:     contact.PhoneNumber,
+		Status:          "active",
+		Source:          source,
+		AgentID:         nil, // Unassigned - goes to queue
+		TransferredAt:   time.Now(),
+	}
+
+	if err := a.DB.Create(&transfer).Error; err != nil {
+		a.Log.Error("Failed to create transfer to queue", "error", err, "contact_id", contact.ID, "source", source)
+		return
+	}
+
+	a.Log.Info("Transfer created to agent queue", "transfer_id", transfer.ID, "contact_id", contact.ID, "source", source)
+
+	// Broadcast to WebSocket
+	a.broadcastTransferCreated(&transfer, contact)
+}
+
 // createTransferFromKeyword creates an agent transfer triggered by a keyword rule
 func (a *App) createTransferFromKeyword(account *models.WhatsAppAccount, contact *models.Contact) {
 	// Check for existing active transfer

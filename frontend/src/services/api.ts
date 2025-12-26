@@ -261,6 +261,15 @@ export const analyticsService = {
     api.get('/analytics/chatbot', { params })
 }
 
+export const agentAnalyticsService = {
+  getSummary: (params?: { from?: string; to?: string; agent_id?: string }) =>
+    api.get('/analytics/agents', { params }),
+  getAgentDetails: (id: string, params?: { from?: string; to?: string }) =>
+    api.get(`/analytics/agents/${id}`, { params }),
+  getComparison: (params?: { from?: string; to?: string }) =>
+    api.get('/analytics/agents/comparison', { params })
+}
+
 export const organizationService = {
   getSettings: () => api.get('/org/settings'),
   updateSettings: (data: {

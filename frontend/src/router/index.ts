@@ -113,6 +113,12 @@ const router = createRouter({
           // All roles can access transfers
         },
         {
+          path: 'analytics/agents',
+          name: 'agent-analytics',
+          component: () => import('@/views/analytics/AgentAnalyticsView.vue')
+          // All roles can access (agents see only their own stats)
+        },
+        {
           path: 'settings',
           name: 'settings',
           component: () => import('@/views/settings/SettingsView.vue'),
@@ -179,7 +185,7 @@ router.beforeEach(async (to, from, next) => {
       if (!requiredRoles.includes(userRole)) {
         // Redirect based on role
         if (userRole === 'agent') {
-          return next({ name: 'chat' })
+          return next({ name: 'agent-analytics' })
         } else {
           return next({ name: 'dashboard' })
         }
@@ -190,7 +196,7 @@ router.beforeEach(async (to, from, next) => {
     if (authStore.isAuthenticated && (to.name === 'login' || to.name === 'register')) {
       const userRole = authStore.userRole
       if (userRole === 'agent') {
-        return next({ name: 'chat' })
+        return next({ name: 'agent-analytics' })
       } else {
         return next({ name: 'dashboard' })
       }
