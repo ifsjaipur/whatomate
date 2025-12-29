@@ -466,6 +466,76 @@ func (a *App) CancelCampaign(r *fastglue.Request) error {
 	})
 }
 
+// RetryFailed retries sending to all failed recipients
+func (a *App) RetryFailed(r *fastglue.Request) error {
+	orgID, err := a.getOrgIDFromContext(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+
+	campaignID := r.RequestCtx.UserValue("id").(string)
+	id, err := uuid.Parse(campaignID)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid campaign ID", nil, "")
+	}
+
+	var campaign models.BulkMessageCampaign
+	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).First(&campaign).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Campaign not found", nil, "")
+	}
+
+	// Only allow retry on completed or paused campaigns
+	if campaign.Status != "completed" && campaign.Status != "paused" && campaign.Status != "failed" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Can only retry failed messages on completed, paused, or failed campaigns", nil, "")
+	}
+
+	// Count failed recipients
+	var failedCount int64
+	a.DB.Model(&models.BulkMessageRecipient{}).Where("campaign_id = ? AND status = ?", id, "failed").Count(&failedCount)
+
+	if failedCount == 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "No failed messages to retry", nil, "")
+	}
+
+	// Reset failed recipients to pending
+	if err := a.DB.Model(&models.BulkMessageRecipient{}).
+		Where("campaign_id = ? AND status = ?", id, "failed").
+		Updates(map[string]interface{}{
+			"status":        "pending",
+			"error_message": "",
+		}).Error; err != nil {
+		a.Log.Error("Failed to reset failed recipients", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to reset failed recipients", nil, "")
+	}
+
+	// Update campaign status and reset failed count
+	if err := a.DB.Model(&campaign).Updates(map[string]interface{}{
+		"status":       "queued",
+		"failed_count": 0,
+	}).Error; err != nil {
+		a.Log.Error("Failed to update campaign status", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update campaign", nil, "")
+	}
+
+	a.Log.Info("Retrying failed messages", "campaign_id", id, "failed_count", failedCount)
+
+	// Enqueue campaign for processing
+	if a.Queue != nil {
+		if err := a.Queue.EnqueueCampaign(r.RequestCtx, id); err != nil {
+			a.Log.Error("Failed to enqueue campaign", "error", err)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to queue campaign", nil, "")
+		}
+	} else {
+		go a.processCampaign(id)
+	}
+
+	return r.SendEnvelope(map[string]interface{}{
+		"message":     "Retrying failed messages",
+		"retry_count": failedCount,
+		"status":      "queued",
+	})
+}
+
 // ImportRecipients implements adding recipients to a campaign
 func (a *App) ImportRecipients(r *fastglue.Request) error {
 	orgID, err := a.getOrgIDFromContext(r)

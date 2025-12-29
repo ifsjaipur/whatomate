@@ -172,6 +172,7 @@ export const campaignsService = {
   start: (id: string) => api.post(`/campaigns/${id}/start`),
   pause: (id: string) => api.post(`/campaigns/${id}/pause`),
   cancel: (id: string) => api.post(`/campaigns/${id}/cancel`),
+  retryFailed: (id: string) => api.post(`/campaigns/${id}/retry-failed`),
   stats: (id: string) => api.get(`/campaigns/${id}/stats`),
   // Recipients
   getRecipients: (id: string) => api.get(`/campaigns/${id}/recipients`),

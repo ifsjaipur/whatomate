@@ -61,7 +61,8 @@ import {
   Eye,
   FileSpreadsheet,
   AlertTriangle,
-  Check
+  Check,
+  RefreshCw
 } from 'lucide-vue-next'
 import { formatDate } from '@/lib/utils'
 
@@ -280,6 +281,18 @@ async function confirmCancelCampaign() {
     await fetchCampaigns()
   } catch (error: any) {
     const message = error.response?.data?.message || 'Failed to cancel campaign'
+    toast.error(message)
+  }
+}
+
+async function retryFailed(campaign: Campaign) {
+  try {
+    const response = await campaignsService.retryFailed(campaign.id)
+    const result = response.data.data
+    toast.success(`Retrying ${result?.retry_count || 0} failed message(s)`)
+    await fetchCampaigns()
+  } catch (error: any) {
+    const message = error.response?.data?.message || 'Failed to retry failed messages'
     toast.error(message)
   }
 }
@@ -893,6 +906,15 @@ async function addRecipientsFromCSV() {
                 >
                   <Play class="h-4 w-4 mr-1" />
                   Resume
+                </Button>
+                <Button
+                  v-if="campaign.failed_count > 0 && (campaign.status === 'completed' || campaign.status === 'paused' || campaign.status === 'failed')"
+                  variant="outline"
+                  size="sm"
+                  @click="retryFailed(campaign)"
+                >
+                  <RefreshCw class="h-4 w-4 mr-1" />
+                  Retry Failed
                 </Button>
                 <Button
                   v-if="campaign.status === 'running' || campaign.status === 'paused' || campaign.status === 'processing' || campaign.status === 'queued'"
