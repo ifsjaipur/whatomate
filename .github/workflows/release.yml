@@ -41,16 +41,36 @@ jobs:
           rm -rf internal/frontend/dist/*
           cp -r frontend/dist/* internal/frontend/dist/
 
-      - name: Build Go binary
+      - name: Build Go binaries
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
-          CGO_ENABLED=0 go build -ldflags "-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME}" -o whatomate ./cmd/server
+          LDFLAGS="-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME}"
+
+          # Linux AMD64
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o whatomate-linux-amd64 ./cmd/server
+
+          # Linux ARM64
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o whatomate-linux-arm64 ./cmd/server
+
+          # macOS AMD64 (Intel)
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o whatomate-darwin-amd64 ./cmd/server
+
+          # macOS ARM64 (Apple Silicon)
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o whatomate-darwin-arm64 ./cmd/server
+
+          # Windows AMD64
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o whatomate-windows-amd64.exe ./cmd/server
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: whatomate
+          files: |
+            whatomate-linux-amd64
+            whatomate-linux-arm64
+            whatomate-darwin-amd64
+            whatomate-darwin-arm64
+            whatomate-windows-amd64.exe
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
