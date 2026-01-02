@@ -1073,30 +1073,48 @@ func (a *App) assignToTeamLoadBalanced(teamID uuid.UUID, orgID uuid.UUID) *uuid.
 		return nil
 	}
 
-	// Count active transfers for each member
-	type AgentLoad struct {
-		UserID uuid.UUID
-		Count  int64
+	// Extract member user IDs
+	memberIDs := make([]uuid.UUID, len(members))
+	for i, m := range members {
+		memberIDs[i] = m.UserID
 	}
 
-	var lowestLoad *AgentLoad
-	for _, m := range members {
-		var count int64
-		a.DB.Model(&models.AgentTransfer{}).
-			Where("organization_id = ? AND agent_id = ? AND status = ?", orgID, m.UserID, "active").
-			Count(&count)
+	// Count active transfers for all members in a single query (optimized from N+1)
+	type AgentLoad struct {
+		AgentID uuid.UUID `gorm:"column:agent_id"`
+		Count   int64     `gorm:"column:count"`
+	}
+	var loads []AgentLoad
+	a.DB.Model(&models.AgentTransfer{}).
+		Select("agent_id, COUNT(*) as count").
+		Where("organization_id = ? AND agent_id IN ? AND status = ?", orgID, memberIDs, "active").
+		Group("agent_id").
+		Scan(&loads)
 
-		if lowestLoad == nil || count < lowestLoad.Count {
-			lowestLoad = &AgentLoad{UserID: m.UserID, Count: count}
+	// Build a map of agent loads
+	loadMap := make(map[uuid.UUID]int64)
+	for _, l := range loads {
+		loadMap[l.AgentID] = l.Count
+	}
+
+	// Find agent with lowest load (agents with 0 transfers won't be in loadMap)
+	var lowestUserID *uuid.UUID
+	var lowestCount int64 = -1
+	for _, m := range members {
+		count := loadMap[m.UserID] // Will be 0 if not in map (no active transfers)
+		if lowestCount < 0 || count < lowestCount {
+			lowestCount = count
+			userID := m.UserID
+			lowestUserID = &userID
 		}
 	}
 
-	if lowestLoad == nil {
+	if lowestUserID == nil {
 		return nil
 	}
 
-	a.Log.Debug("Load-balanced assigned to agent", "team_id", teamID, "user_id", lowestLoad.UserID, "current_load", lowestLoad.Count)
-	return &lowestLoad.UserID
+	a.Log.Debug("Load-balanced assigned to agent", "team_id", teamID, "user_id", *lowestUserID, "current_load", lowestCount)
+	return lowestUserID
 }
 
 // createTransferToTeam creates an agent transfer to a specific team with appropriate assignment
