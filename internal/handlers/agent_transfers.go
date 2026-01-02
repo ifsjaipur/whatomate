@@ -1003,6 +1003,14 @@ func (a *App) broadcastTransferAssigned(transfer *models.AgentTransfer) {
 
 	if transfer.AgentID != nil {
 		payload["agent_id"] = transfer.AgentID.String()
+	} else {
+		payload["agent_id"] = nil
+	}
+
+	if transfer.TeamID != nil {
+		payload["team_id"] = transfer.TeamID.String()
+	} else {
+		payload["team_id"] = nil
 	}
 
 	a.WSHub.BroadcastToOrg(transfer.OrganizationID, websocket.WSMessage{

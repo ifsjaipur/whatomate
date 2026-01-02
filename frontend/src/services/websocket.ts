@@ -311,7 +311,8 @@ class WebSocketService {
     const authStore = useAuthStore()
 
     transfersStore.updateTransfer(payload.id, {
-      agent_id: payload.agent_id
+      agent_id: payload.agent_id,
+      team_id: payload.team_id
     })
 
     // Notify if assigned to current user
