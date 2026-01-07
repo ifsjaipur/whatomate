@@ -17,6 +17,9 @@ COPY frontend/ ./
 # Build frontend
 RUN npm run build
 
+# List contents to verify build
+RUN echo "=== Frontend build output ===" && ls -la /frontend/dist/
+
 # Stage 2: Build Backend
 FROM golang:alpine AS backend-builder
 
@@ -28,7 +31,7 @@ WORKDIR /app
 # Copy go mod files
 COPY go.mod go.sum ./
 
-# Download dependencies (Go will auto-install correct toolchain)
+# Download dependencies
 RUN go mod download
 
 # Copy source code
@@ -54,17 +57,19 @@ WORKDIR /app
 # Copy backend binary
 COPY --from=backend-builder /app/whatomate ./whatomate
 
-# Copy frontend build
-# COPY --from=frontend-builder /frontend/dist .
-# Copy frontend index.html explicitly
-COPY --from=frontend-builder /frontend/dist/index.html /app/index.html
+# Copy ALL frontend files to root (where the app expects them)
+COPY --from=frontend-builder /frontend/dist ./
 
-# Copy frontend assets explicitly (if present)
-COPY --from=frontend-builder /frontend/dist/assets /app/assets
-
+# Also try copying to common locations the app might check
+COPY --from=frontend-builder /frontend/dist/index.html ./index.html
 
 # Copy config template
-COPY config.example.toml ./config.toml
+COPY --from=backend-builder /app/config.example.toml ./config.toml
+
+# Verify frontend files are present
+RUN echo "=== Files in /app ===" && ls -la /app/ && \
+    echo "=== Checking for index.html ===" && \
+    (test -f /app/index.html && echo "index.html found!" || echo "index.html NOT FOUND")
 
 # Create directories and set permissions
 RUN mkdir -p /app/data /app/logs && \
