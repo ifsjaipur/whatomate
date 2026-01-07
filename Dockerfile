@@ -14,14 +14,20 @@ RUN test -f dist/index.html
 # =========================
 FROM golang:1.24.5-alpine AS builder
 WORKDIR /app
+
 RUN apk add --no-cache git ca-certificates
 
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
-RUN test -f frontend/dist/index.html
+
+# 🔥 THIS PATH MATTERS
+RUN rm -rf internal/frontend/dist
+COPY --from=frontend-builder /app/frontend/dist ./internal/frontend/dist
+
+# 🔥 HARD VERIFY (non-negotiable)
+RUN test -f internal/frontend/dist/index.html && echo "Embed OK"
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o whatomate ./cmd/server
 
