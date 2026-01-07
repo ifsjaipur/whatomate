@@ -55,7 +55,13 @@ WORKDIR /app
 COPY --from=backend-builder /app/whatomate ./whatomate
 
 # Copy frontend build
-COPY --from=frontend-builder /frontend/dist .
+# COPY --from=frontend-builder /frontend/dist .
+# Copy frontend index.html explicitly
+COPY --from=frontend-builder /frontend/dist/index.html /app/index.html
+
+# Copy frontend assets explicitly (if present)
+COPY --from=frontend-builder /frontend/dist/assets /app/assets
+
 
 # Copy config template
 COPY config.example.toml ./config.toml
