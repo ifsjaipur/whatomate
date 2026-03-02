@@ -133,8 +133,8 @@ func (a *App) ConnectCallTransfer(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "sdp_offer is required", nil, "")
 	}
 
-	if !a.IsCallingEnabledForOrg(orgID) {
-		return r.SendErrorEnvelope(fasthttp.StatusServiceUnavailable, "Calling is not enabled for this organization", nil, "")
+	if err := a.requireCallingEnabled(r, orgID); err != nil {
+		return nil
 	}
 
 	sdpAnswer, err := a.CallManager.ConnectAgentToTransfer(transferID, userID, req.SDPOffer)
