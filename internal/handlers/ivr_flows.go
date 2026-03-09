@@ -23,6 +23,7 @@ type IVRFlowRequest struct {
 	Description     string       `json:"description"`
 	IsActive        bool         `json:"is_active"`
 	IsCallStart     bool         `json:"is_call_start"`
+	IsOutgoingEnd   bool         `json:"is_outgoing_end"`
 	Menu            models.JSONB `json:"menu"`
 	WelcomeAudioURL string       `json:"welcome_audio_url"`
 }
@@ -113,6 +114,13 @@ func (a *App) CreateIVRFlow(r *fastglue.Request) error {
 			Update("is_call_start", false)
 	}
 
+	// If marking this as outgoing end, unset others for the same account
+	if req.IsOutgoingEnd {
+		a.DB.Model(&models.IVRFlow{}).
+			Where("organization_id = ? AND whatsapp_account = ? AND is_outgoing_end = ?", orgID, req.WhatsAppAccount, true).
+			Update("is_outgoing_end", false)
+	}
+
 	// Validate and generate TTS for v2 flow graph
 	if req.Menu != nil {
 		if err := validateFlowGraph(req.Menu); err != nil {
@@ -140,6 +148,7 @@ func (a *App) CreateIVRFlow(r *fastglue.Request) error {
 		Description:     req.Description,
 		IsActive:        req.IsActive,
 		IsCallStart:     req.IsCallStart,
+		IsOutgoingEnd:   req.IsOutgoingEnd,
 		Menu:            req.Menu,
 		WelcomeAudioURL: req.WelcomeAudioURL,
 	}
@@ -185,6 +194,14 @@ func (a *App) UpdateIVRFlow(r *fastglue.Request) error {
 			Update("is_call_start", false)
 	}
 
+	// If marking this as outgoing end, unset others for the same account
+	if req.IsOutgoingEnd && !flow.IsOutgoingEnd {
+		a.DB.Model(&models.IVRFlow{}).
+			Where("organization_id = ? AND whatsapp_account = ? AND is_outgoing_end = ? AND id != ?",
+				orgID, flow.WhatsAppAccount, true, flowID).
+			Update("is_outgoing_end", false)
+	}
+
 	// Validate and generate TTS for v2 flow graph
 	if req.Menu != nil {
 		if err := validateFlowGraph(req.Menu); err != nil {
@@ -207,8 +224,9 @@ func (a *App) UpdateIVRFlow(r *fastglue.Request) error {
 	// Only update fields that were actually provided (non-zero) to support
 	// partial updates like toggling is_active without wiping the menu.
 	updates := map[string]any{
-		"is_active":    req.IsActive,
-		"is_call_start": req.IsCallStart,
+		"is_active":       req.IsActive,
+		"is_call_start":   req.IsCallStart,
+		"is_outgoing_end": req.IsOutgoingEnd,
 	}
 	if req.Name != "" {
 		updates["name"] = req.Name

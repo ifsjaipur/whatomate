@@ -108,7 +108,11 @@ async function deleteFlow() {
 
 async function toggleActive(flow: IVRFlow) {
   try {
-    await store.updateIVRFlow(flow.id, { is_active: !flow.is_active })
+    await store.updateIVRFlow(flow.id, {
+      is_active: !flow.is_active,
+      is_call_start: flow.is_call_start,
+      is_outgoing_end: flow.is_outgoing_end,
+    })
     store.fetchIVRFlows()
   } catch {
     toast.error(t('calling.flowSaveFailed'))
@@ -117,7 +121,11 @@ async function toggleActive(flow: IVRFlow) {
 
 async function toggleCallStart(flow: IVRFlow) {
   try {
-    await store.updateIVRFlow(flow.id, { is_call_start: !flow.is_call_start })
+    await store.updateIVRFlow(flow.id, {
+      is_active: flow.is_active,
+      is_call_start: !flow.is_call_start,
+      is_outgoing_end: flow.is_outgoing_end,
+    })
     store.fetchIVRFlows()
   } catch {
     toast.error(t('calling.flowSaveFailed'))
@@ -193,6 +201,12 @@ onMounted(async () => {
                     @click="toggleCallStart(flow)"
                   >
                     {{ flow.is_call_start ? t('calling.callStart') : t('calling.secondary') }}
+                  </Badge>
+                  <Badge
+                    v-if="flow.is_active && flow.is_outgoing_end"
+                    variant="default"
+                  >
+                    {{ t('calling.outgoingEnd') }}
                   </Badge>
                 </div>
               </TableCell>

@@ -360,6 +360,21 @@ func (m *Manager) HandleOutgoingCallWebhook(callID, event, sdpAnswer string) {
 		m.cleanupSession(callID)
 
 	case "ended", "terminated", "terminate":
+		// If post-call IVR is active (agent already hung up, IVR goroutine is
+		// running), mark the session as completed so the IVR loop exits cleanly
+		// on its next iteration, then let the IVR goroutine handle final cleanup.
+		session.mu.Lock()
+		ivrActive := session.IVRFlow != nil && session.AgentPC == nil
+		session.mu.Unlock()
+
+		if ivrActive {
+			session.mu.Lock()
+			session.Status = models.CallStatusCompleted
+			session.mu.Unlock()
+			m.log.Info("Contact hung up during post-call IVR, signalling IVR to stop", "call_id", callID)
+			return
+		}
+
 		// Calculate duration
 		var callLog models.CallLog
 		disconnectedBy := "client"
@@ -392,6 +407,9 @@ func (m *Manager) HandleOutgoingCallWebhook(callID, event, sdpAnswer string) {
 }
 
 // HangupOutgoingCall terminates an outgoing call initiated by an agent.
+// If a post-call IVR flow (is_outgoing_end) is configured for the session's
+// WhatsApp account, the agent side is torn down but the WhatsApp leg stays
+// open so the contact can hear the IVR.
 func (m *Manager) HangupOutgoingCall(callLogID, agentID uuid.UUID) error {
 	session := m.GetSessionByCallLogID(callLogID)
 	if session == nil {
@@ -402,32 +420,132 @@ func (m *Manager) HangupOutgoingCall(callLogID, agentID uuid.UUID) error {
 		return fmt.Errorf("not an outgoing call")
 	}
 
-	// Terminate via WhatsApp API
-	m.terminateCallBySession(session)
+	// Look up a post-call IVR flow for this account
+	var ivrFlow models.IVRFlow
+	hasPostCallIVR := m.db.Where(
+		"organization_id = ? AND whatsapp_account = ? AND is_outgoing_end = ? AND is_active = ?",
+		session.OrganizationID, session.AccountName, true, true,
+	).First(&ivrFlow).Error == nil
 
-	now := time.Now()
+	if !hasPostCallIVR {
+		// No post-call IVR — original behavior: terminate + cleanup
+		m.terminateCallBySession(session)
 
-	// Calculate duration
-	var callLog models.CallLog
-	if err := m.db.Where("id = ?", callLogID).First(&callLog).Error; err == nil {
-		m.db.Model(&callLog).Updates(map[string]any{
-			"status":          models.CallStatusCompleted,
-			"ended_at":        now,
-			"duration":        durationSince(callLog.AnsweredAt, now),
-			"disconnected_by": models.DisconnectedByAgent,
+		now := time.Now()
+		var callLog models.CallLog
+		if err := m.db.Where("id = ?", callLogID).First(&callLog).Error; err == nil {
+			m.db.Model(&callLog).Updates(map[string]any{
+				"status":          models.CallStatusCompleted,
+				"ended_at":        now,
+				"duration":        durationSince(callLog.AnsweredAt, now),
+				"disconnected_by": models.DisconnectedByAgent,
+			})
+		}
+
+		m.broadcastEvent(session.OrganizationID, websocket.TypeOutgoingCallEnded, map[string]any{
+			"call_log_id":     callLogID.String(),
+			"call_id":         session.ID,
+			"contact_id":      session.ContactID.String(),
+			"contact_phone":   session.TargetPhone,
+			"ended_at":        now.Format(time.RFC3339),
+			"disconnected_by": "agent",
+		})
+
+		m.cleanupSession(session.ID)
+		return nil
+	}
+
+	// --- Post-call IVR path ---
+
+	// 1. Disable agent PC's OnConnectionStateChange to prevent it from
+	//    calling EndCall when the agent PC closes.
+	session.mu.Lock()
+	agentPC := session.AgentPC
+	session.mu.Unlock()
+	if agentPC != nil {
+		agentPC.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+			m.log.Debug("Agent PC state after hangup (ignored)", "call_id", session.ID, "state", state.String())
 		})
 	}
 
+	// 2. Stop bridge and save last RTP sequence for IVR player continuity
+	session.mu.Lock()
+	bridge := session.Bridge
+	session.Bridge = nil
+	session.mu.Unlock()
+
+	if bridge != nil {
+		bridge.Stop()
+		bridge.Wait()
+		seq, ts := bridge.LastCallerSeq()
+		session.mu.Lock()
+		session.LastRTPSeq = seq
+		session.LastRTPTimestamp = ts
+		session.mu.Unlock()
+	}
+
+	// 3. Close agent-side resources
+	session.mu.Lock()
+	ap := session.AgentPC
+	session.AgentPC = nil
+	session.PeerConnection = nil
+	session.AgentAudioTrack = nil
+	session.AgentRemoteTrack = nil
+	recorder := session.Recorder
+	session.Recorder = nil
+	session.mu.Unlock()
+
+	if ap != nil {
+		_ = ap.Close()
+	}
+
+	// Finalize recording before IVR starts
+	if recorder != nil {
+		go m.finalizeRecording(session.OrganizationID, session.CallLogID, recorder)
+	}
+
+	// 4. Set IVR flow on the session
+	session.mu.Lock()
+	session.IVRFlow = &ivrFlow
+	session.mu.Unlock()
+
+	// 5. Update call log
+	m.db.Model(&models.CallLog{}).
+		Where("id = ?", callLogID).
+		Updates(map[string]any{
+			"disconnected_by": models.DisconnectedByAgent,
+			"ivr_flow_id":     ivrFlow.ID,
+		})
+
+	// 6. Broadcast event with ivr_active flag
 	m.broadcastEvent(session.OrganizationID, websocket.TypeOutgoingCallEnded, map[string]any{
-		"call_log_id":      callLogID.String(),
-		"call_id":          session.ID,
-		"contact_id":       session.ContactID.String(),
-		"contact_phone":    session.TargetPhone,
-		"ended_at":         now.Format(time.RFC3339),
-		"disconnected_by":  "agent",
+		"call_log_id":     callLogID.String(),
+		"call_id":         session.ID,
+		"contact_id":      session.ContactID.String(),
+		"contact_phone":   session.TargetPhone,
+		"disconnected_by": "agent",
+		"ivr_active":      true,
 	})
 
-	m.cleanupSession(session.ID)
+	// 7. Run IVR in a goroutine — when done, terminate and clean up
+	go func() {
+		m.runIVRFlow(session, nil)
+
+		m.terminateCallBySession(session)
+
+		now := time.Now()
+		var callLog models.CallLog
+		if err := m.db.Where("id = ?", callLogID).First(&callLog).Error; err == nil {
+			m.db.Model(&callLog).Updates(map[string]any{
+				"status":   models.CallStatusCompleted,
+				"ended_at": now,
+				"duration": durationSince(callLog.AnsweredAt, now),
+			})
+		}
+
+		m.cleanupSession(session.ID)
+	}()
+
 	return nil
 }
 

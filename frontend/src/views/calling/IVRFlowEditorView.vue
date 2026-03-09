@@ -37,6 +37,7 @@ const flowId = computed(() => route.params.id as string)
 const flowName = ref('')
 const isActive = ref(true)
 const isCallStart = ref(false)
+const isOutgoingEnd = ref(false)
 const saving = ref(false)
 const loading = ref(true)
 
@@ -306,6 +307,7 @@ async function saveFlow() {
       name: flowName.value,
       is_active: isActive.value,
       is_call_start: isCallStart.value,
+      is_outgoing_end: isOutgoingEnd.value,
       menu: flowData,
     })
 
@@ -353,6 +355,7 @@ onMounted(async () => {
     flowName.value = flow.name
     isActive.value = flow.is_active
     isCallStart.value = flow.is_call_start
+    isOutgoingEnd.value = flow.is_outgoing_end
 
     if (flow.menu && flow.menu.version === 2) {
       loadFlowData(flow.menu)
@@ -379,7 +382,11 @@ onMounted(async () => {
       </div>
       <div class="flex items-center gap-2 ml-2">
         <Switch v-model:checked="isCallStart" :disabled="!isActive" />
-        <Label class="text-xs whitespace-nowrap">Call Start</Label>
+        <Label class="text-xs whitespace-nowrap">Incoming Call Start</Label>
+      </div>
+      <div class="flex items-center gap-2 ml-2">
+        <Switch v-model:checked="isOutgoingEnd" :disabled="!isActive" />
+        <Label class="text-xs whitespace-nowrap">Outgoing Post-Call</Label>
       </div>
       <div class="flex-1" />
       <Button :disabled="saving" size="sm" @click="saveFlow">

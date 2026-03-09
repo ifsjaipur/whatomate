@@ -899,6 +899,7 @@ export interface IVRFlow {
   description: string
   is_active: boolean
   is_call_start: boolean
+  is_outgoing_end: boolean
   menu: IVRFlowData
   welcome_audio_url: string
   created_at: string
@@ -998,7 +999,7 @@ export const ivrFlowsService = {
   get: (id: string) => api.get<IVRFlow>(`/ivr-flows/${id}`),
   create: (data: { whatsapp_account: string; name: string; description?: string; is_call_start?: boolean; menu: IVRFlowData; welcome_audio_url?: string }) =>
     api.post<IVRFlow>('/ivr-flows', data),
-  update: (id: string, data: { name?: string; description?: string; is_active?: boolean; is_call_start?: boolean; menu?: IVRFlowData; welcome_audio_url?: string }) =>
+  update: (id: string, data: { name?: string; description?: string; is_active?: boolean; is_call_start?: boolean; is_outgoing_end?: boolean; menu?: IVRFlowData; welcome_audio_url?: string }) =>
     api.put<IVRFlow>(`/ivr-flows/${id}`, data),
   delete: (id: string) => api.delete(`/ivr-flows/${id}`),
   uploadAudio: (file: File) => {

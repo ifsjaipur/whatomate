@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pion/webrtc/v4"
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/shridarpatil/whatomate/pkg/whatsapp"
 )
@@ -81,13 +82,47 @@ func (m *Manager) runIVRFlow(session *CallSession, waAccount *whatsapp.Account) 
 	session.IVRCtx = ivrCtx
 	session.mu.Unlock()
 
+	// For outgoing calls, play IVR audio on the WA track (contact hears it)
+	// and start DTMF detection on the WA remote track.
+	if session.Direction == models.CallDirectionOutgoing {
+		session.mu.Lock()
+		waRemote := session.WARemoteTrack
+		if session.DTMFBuffer == nil {
+			session.DTMFBuffer = make(chan byte, 32)
+		}
+		session.BridgeStarted = make(chan struct{})
+		session.mu.Unlock()
+		if waRemote != nil {
+			go m.consumeAudioWithDTMF(session, waRemote)
+		}
+	}
+
 	// Reuse the session's IVR player to maintain RTP sequence continuity
 	session.mu.Lock()
 	if session.IVRPlayer == nil {
-		session.IVRPlayer = NewAudioPlayer(session.AudioTrack)
+		var ivrTrack *webrtc.TrackLocalStaticRTP
+		if session.Direction == models.CallDirectionOutgoing {
+			ivrTrack = session.WAAudioTrack
+		} else {
+			ivrTrack = session.AudioTrack
+		}
+		player := NewAudioPlayer(ivrTrack)
+		// For outgoing post-call IVR, the bridge was forwarding agent audio
+		// to WAAudioTrack with high RTP seq numbers. Seed the player so its
+		// packets aren't dropped as "old" by the WA endpoint.
+		if session.LastRTPSeq > 0 {
+			player.SetSequence(session.LastRTPSeq, session.LastRTPTimestamp)
+		}
+		session.IVRPlayer = player
 	}
 	player := session.IVRPlayer
 	session.mu.Unlock()
+
+	// Brief delay to let the media path stabilize after bridge teardown
+	// (same fix as incoming calls in webrtc.go).
+	if session.Direction == models.CallDirectionOutgoing {
+		time.Sleep(500 * time.Millisecond)
+	}
 
 	m.executeNodeLoop(session, waAccount, &graph, ivrCtx, player)
 }
@@ -435,7 +470,13 @@ func (m *Manager) executeTransfer(session *CallSession, node *IVRNode, ctx *IVRC
 	// Create a fresh IVRPlayer for post-transfer audio. EndTransfer saved
 	// the last RTP seq/ts from the bridge so we can continue from there.
 	session.mu.Lock()
-	player := NewAudioPlayer(session.AudioTrack)
+	var postTransferTrack *webrtc.TrackLocalStaticRTP
+	if session.Direction == models.CallDirectionOutgoing {
+		postTransferTrack = session.WAAudioTrack
+	} else {
+		postTransferTrack = session.AudioTrack
+	}
+	player := NewAudioPlayer(postTransferTrack)
 	if session.LastRTPSeq > 0 {
 		player.SetSequence(session.LastRTPSeq, session.LastRTPTimestamp)
 	}
@@ -551,7 +592,11 @@ func (m *Manager) executeHangup(session *CallSession, node *IVRNode, ctx *IVRCon
 	}
 
 	m.saveIVRPath(session, ctx.Path)
-	m.terminateCall(session, waAccount)
+	if waAccount != nil {
+		m.terminateCall(session, waAccount)
+	} else {
+		m.terminateCallBySession(session)
+	}
 }
 
 // --- Helpers ---
