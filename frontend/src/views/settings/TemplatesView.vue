@@ -485,6 +485,7 @@ const buttonTypes = [
   { value: 'QUICK_REPLY', label: 'Quick Reply', description: 'Simple reply button' },
   { value: 'URL', label: 'URL', description: 'Opens a website' },
   { value: 'PHONE_NUMBER', label: 'Phone Number', description: 'Calls a number' },
+  { value: 'COPY_CODE', label: 'Copy Code', description: 'Coupon code button (marketing only)' },
 ]
 
 function addButton() {
@@ -979,6 +980,13 @@ function formatPreview(text: string, samples: any[]): string {
               <div v-if="button.type === 'PHONE_NUMBER'" class="space-y-1">
                 <Label class="text-xs">{{ $t('templates.buttonPhoneNumber') }}</Label>
                 <Input v-model="button.phone_number" placeholder="+1234567890" class="h-9" />
+              </div>
+
+              <!-- Copy code specific fields -->
+              <div v-if="button.type === 'COPY_CODE'" class="space-y-1">
+                <Label class="text-xs">Example coupon code</Label>
+                <Input v-model="button.example" placeholder="WELCOME10" class="h-9" />
+                <p class="text-xs text-muted-foreground">Sample coupon code for template approval (max 15 chars)</p>
               </div>
             </div>
           </div>

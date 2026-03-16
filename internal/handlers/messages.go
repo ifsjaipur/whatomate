@@ -187,7 +187,7 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 				return "", fmt.Errorf("template is required for template messages")
 			}
 			components := whatsapp.BuildTemplateComponents(req.BodyParams, req.Template.HeaderType, req.HeaderMediaID)
-			buttonComponents := whatsapp.ButtonURLParamsToComponents(req.ButtonURLParams)
+			buttonComponents := whatsapp.ButtonURLParamsToComponents(req.ButtonURLParams, req.Template.Buttons)
 			components = append(components, buttonComponents...)
 			return a.WhatsApp.SendTemplateMessage(sendCtx, waAccount, req.Contact.PhoneNumber, req.Template.Name, req.Template.Language, components)
 

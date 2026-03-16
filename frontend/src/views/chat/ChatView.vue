@@ -748,16 +748,19 @@ const templatePreview = computed(() => {
   return body
 })
 
-function extractButtonUrlParams(buttons: any[]): { index: number; text: string; value: string }[] {
+function extractButtonUrlParams(buttons: any[]): { index: number; text: string; value: string; type: string }[] {
   if (!buttons?.length) return []
   return buttons
     .map((btn: any, index: number) => {
+      if (btn.type === 'COPY_CODE') {
+        return { index, text: btn.text || 'Copy Code', value: btn.example?.[0] || '', type: 'COPY_CODE' }
+      }
       if (btn.type !== 'URL' || !btn.url) return null
       const hasParams = /\{\{[^}]+\}\}/.test(btn.url)
       if (!hasParams) return null
-      return { index, text: btn.text || 'URL Button', value: '' }
+      return { index, text: btn.text || 'URL Button', value: '', type: 'URL' }
     })
-    .filter((b): b is { index: number; text: string; value: string } => b !== null)
+    .filter((b): b is { index: number; text: string; value: string; type: string } => b !== null)
 }
 
 function handleTemplateWithParams(template: any, paramNames: string[]) {
@@ -2221,10 +2224,12 @@ async function sendMediaMessage() {
             />
           </div>
           <div v-for="(btnParam, idx) in templateButtonUrlParams" :key="`btn-${btnParam.index}`" class="space-y-1">
-            <label class="text-sm font-medium">{{ $t('chat.urlButtonParam', { button: btnParam.text }) }}</label>
+            <label class="text-sm font-medium">
+              {{ btnParam.type === 'COPY_CODE' ? `Coupon Code (${btnParam.text})` : $t('chat.urlButtonParam', { button: btnParam.text }) }}
+            </label>
             <Input
               v-model="templateButtonUrlParams[idx].value"
-              :placeholder="$t('chat.urlButtonParamPlaceholder')"
+              :placeholder="btnParam.type === 'COPY_CODE' ? 'WELCOME10' : $t('chat.urlButtonParamPlaceholder')"
               class="h-9"
             />
           </div>
