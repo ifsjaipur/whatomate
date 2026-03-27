@@ -321,7 +321,10 @@ function openEditDialog(template: Template) {
     header_content: template.header_content || '',
     body_content: template.body_content,
     footer_content: template.footer_content || '',
-    buttons: template.buttons || [],
+    buttons: (template.buttons || []).map((b: any) => ({
+      ...b,
+      example: Array.isArray(b.example) ? b.example[0] ?? '' : b.example,
+    })),
     sample_values: template.sample_values || []
   }
   // Reset header media state (will show existing handle if present)
@@ -482,6 +485,7 @@ const buttonTypes = [
   { value: 'QUICK_REPLY', label: 'Quick Reply', description: 'Simple reply button' },
   { value: 'URL', label: 'URL', description: 'Opens a website' },
   { value: 'PHONE_NUMBER', label: 'Phone Number', description: 'Calls a number' },
+  { value: 'COPY_CODE', label: 'Copy Code', description: 'Coupon code button (marketing only)' },
 ]
 
 function addButton() {
@@ -963,14 +967,26 @@ function formatPreview(text: string, samples: any[]): string {
               <!-- URL specific fields -->
               <div v-if="button.type === 'URL'" class="space-y-1">
                 <Label class="text-xs">{{ $t('templates.buttonUrl') }}</Label>
-                <Input v-model="button.url" placeholder="https://example.com/{{path}}" class="h-9" />
+                <Input v-model="button.url" placeholder="https://example.com/{{1}}" class="h-9" />
                 <p class="text-xs text-muted-foreground">{{ $t('templates.buttonUrlHint') }}</p>
+                <div v-if="button.url && button.url.includes('{{')">
+                  <Label class="text-xs">{{ $t('templates.buttonUrlExample') }}</Label>
+                  <Input v-model="button.example" :placeholder="$t('templates.buttonUrlExamplePlaceholder')" class="h-9" />
+                  <p class="text-xs text-muted-foreground">{{ $t('templates.buttonUrlExampleHint') }}</p>
+                </div>
               </div>
 
               <!-- Phone number specific fields -->
               <div v-if="button.type === 'PHONE_NUMBER'" class="space-y-1">
                 <Label class="text-xs">{{ $t('templates.buttonPhoneNumber') }}</Label>
                 <Input v-model="button.phone_number" placeholder="+1234567890" class="h-9" />
+              </div>
+
+              <!-- Copy code specific fields -->
+              <div v-if="button.type === 'COPY_CODE'" class="space-y-1">
+                <Label class="text-xs">{{ $t('templates.copyCodeExample') }}</Label>
+                <Input v-model="button.example" :placeholder="$t('templates.copyCodeExamplePlaceholder')" class="h-9" />
+                <p class="text-xs text-muted-foreground">{{ $t('templates.copyCodeExampleHint') }}</p>
               </div>
             </div>
           </div>

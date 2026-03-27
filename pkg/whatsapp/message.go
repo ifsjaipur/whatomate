@@ -300,6 +300,60 @@ func BuildTemplateComponents(bodyParams map[string]string, headerType string, he
 	return components
 }
 
+// ButtonURLParamsToComponents converts button parameters to WhatsApp API button components.
+// buttonParams maps button index (as string like "0", "1") to the dynamic parameter value.
+// templateButtons is the JSONB buttons array from the template, used to determine button type.
+// URL buttons produce: {"type": "button", "sub_type": "url", "index": "0", "parameters": [{"type": "text", "text": "value"}]}
+// COPY_CODE buttons produce: {"type": "button", "sub_type": "copy_code", "index": "0", "parameters": [{"type": "coupon_code", "coupon_code": "value"}]}
+func ButtonURLParamsToComponents(buttonParams map[string]string, templateButtons ...[]interface{}) []map[string]interface{} {
+	if len(buttonParams) == 0 {
+		return nil
+	}
+
+	// Build a lookup of button index -> type from template buttons
+	btnTypes := map[string]string{}
+	if len(templateButtons) > 0 {
+		for i, raw := range templateButtons[0] {
+			if btn, ok := raw.(map[string]interface{}); ok {
+				if t, ok := btn["type"].(string); ok {
+					btnTypes[fmt.Sprintf("%d", i)] = strings.ToUpper(t)
+				}
+			}
+		}
+	}
+
+	keys := make([]string, 0, len(buttonParams))
+	for k := range buttonParams {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	components := make([]map[string]interface{}, 0, len(buttonParams))
+	for _, index := range keys {
+		value := buttonParams[index]
+		if btnTypes[index] == "COPY_CODE" {
+			components = append(components, map[string]interface{}{
+				"type":     "button",
+				"sub_type": "copy_code",
+				"index":    index,
+				"parameters": []map[string]interface{}{
+					{"type": "coupon_code", "coupon_code": value},
+				},
+			})
+		} else {
+			components = append(components, map[string]interface{}{
+				"type":     "button",
+				"sub_type": "url",
+				"index":    index,
+				"parameters": []map[string]interface{}{
+					{"type": "text", "text": value},
+				},
+			})
+		}
+	}
+	return components
+}
+
 // SendFlowMessage sends an interactive WhatsApp Flow message
 // flowID is the Meta Flow ID, headerText is optional header, bodyText is the message body,
 // ctaText is the button text, flowToken is a unique token for tracking the flow response,

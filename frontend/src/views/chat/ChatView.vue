@@ -159,6 +159,7 @@ const templateDialogOpen = ref(false)
 const selectedTemplate = ref<any>(null)
 const templateParamNames = ref<string[]>([])
 const templateParamValues = ref<Record<string, string>>({})
+const templateButtonUrlParams = ref<{ index: number; text: string; value: string }[]>([])
 const isSendingTemplate = ref(false)
 const templateHeaderType = computed(() => selectedTemplate.value?.header_type)
 const {
@@ -747,20 +748,36 @@ const templatePreview = computed(() => {
   return body
 })
 
+function extractButtonUrlParams(buttons: any[]): { index: number; text: string; value: string; type: string }[] {
+  if (!buttons?.length) return []
+  return buttons
+    .map((btn: any, index: number) => {
+      if (btn.type === 'COPY_CODE') {
+        return { index, text: btn.text || 'Copy Code', value: btn.example?.[0] || '', type: 'COPY_CODE' }
+      }
+      if (btn.type !== 'URL' || !btn.url) return null
+      const hasParams = /\{\{[^}]+\}\}/.test(btn.url)
+      if (!hasParams) return null
+      return { index, text: btn.text || 'URL Button', value: '', type: 'URL' }
+    })
+    .filter((b): b is { index: number; text: string; value: string; type: string } => b !== null)
+}
+
 function handleTemplateWithParams(template: any, paramNames: string[]) {
   selectedTemplate.value = template
   templateParamNames.value = paramNames
   templateParamValues.value = Object.fromEntries(paramNames.map(n => [n, '']))
   clearTemplateHeaderMedia()
+  templateButtonUrlParams.value = extractButtonUrlParams(template.buttons)
   templateDialogOpen.value = true
 }
 
 async function sendTemplateMessage() {
   if (!contactsStore.currentContact || !selectedTemplate.value) return
 
-  // Validate all params are filled
-  const missing = templateParamNames.value.some(n => !templateParamValues.value[n]?.trim())
-  if (missing) {
+  // Validate all body params are filled
+  const missingBody = templateParamNames.value.some(n => !templateParamValues.value[n]?.trim())
+  if (missingBody) {
     toast.error(t('chat.parameterRequired'))
     return
   }
@@ -771,6 +788,20 @@ async function sendTemplateMessage() {
     return
   }
 
+  // Validate all button URL params are filled
+  const missingButton = templateButtonUrlParams.value.some(b => !b.value?.trim())
+  if (missingButton) {
+    toast.error(t('chat.parameterRequired'))
+    return
+  }
+
+  // Build button params map: button index -> value
+  const buttonParams: Record<string, string> | undefined =
+    templateButtonUrlParams.value.length > 0
+      ? Object.fromEntries(templateButtonUrlParams.value.map(b => [String(b.index), b.value]))
+      : undefined
+
+
   isSendingTemplate.value = true
   try {
     await contactsStore.sendTemplate(
@@ -778,7 +809,8 @@ async function sendTemplateMessage() {
       selectedTemplate.value.name,
       templateParamValues.value,
       selectedAccount.value || undefined,
-      templateHeaderFile.value || undefined
+      templateHeaderFile.value || undefined,
+      buttonParams
     )
     toast.success(t('chat.templateSent'))
     templateDialogOpen.value = false
@@ -786,6 +818,7 @@ async function sendTemplateMessage() {
     templateParamNames.value = []
     templateParamValues.value = {}
     clearTemplateHeaderMedia()
+    templateButtonUrlParams.value = []
   } catch {
     toast.error(t('chat.templateSendFailed'))
   } finally {
@@ -1093,7 +1126,7 @@ function getGoogleMapsUrl(location: LocationData): string {
   return `https://www.google.com/maps?q=${location.latitude},${location.longitude}`
 }
 
-function getInteractiveButtons(message: Message): Array<{ id: string; title: string }> {
+function getInteractiveButtons(message: Message): Array<{ id: string; title: string; type: string; url: string }> {
   if (!message.interactive_data) {
     return []
   }
@@ -1108,7 +1141,9 @@ function getInteractiveButtons(message: Message): Array<{ id: string; title: str
   }
   return items.map((btn: any) => ({
     id: btn.reply?.id || btn.id || '',
-    title: btn.reply?.title || btn.title || btn.text || ''
+    title: btn.reply?.title || btn.title || btn.text || '',
+    type: btn.type || 'QUICK_REPLY',
+    url: btn.url || ''
   }))
 }
 
@@ -1880,16 +1915,24 @@ async function sendMediaMessage() {
                   v-if="getInteractiveButtons(message).length > 0"
                   class="interactive-buttons mt-2 -mx-2 -mb-1.5 border-t"
                 >
-                  <div
-                    v-for="(btn, index) in getInteractiveButtons(message)"
-                    :key="btn.id"
-                    :class="[
-                      'py-2 text-sm text-center font-medium cursor-pointer',
-                      index > 0 && 'border-t'
-                    ]"
-                  >
-                    {{ btn.title }}
-                  </div>
+                  <template v-for="(btn, index) in getInteractiveButtons(message)" :key="btn.id">
+                    <a
+                      v-if="btn.type === 'URL' && btn.url"
+                      :href="btn.url"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      :class="['py-2 text-sm text-center font-medium cursor-pointer flex items-center justify-center gap-1.5', index > 0 && 'border-t']"
+                    >
+                      <ExternalLink class="h-3.5 w-3.5" />
+                      {{ btn.title }}
+                    </a>
+                    <div
+                      v-else
+                      :class="['py-2 text-sm text-center font-medium cursor-pointer', index > 0 && 'border-t']"
+                    >
+                      {{ btn.title }}
+                    </div>
+                  </template>
                 </div>
                 <!-- CTA URL button - WhatsApp style -->
                 <a
@@ -2177,6 +2220,16 @@ async function sendMediaMessage() {
             <Input
               v-model="templateParamValues[param]"
               :placeholder="param"
+              class="h-9"
+            />
+          </div>
+          <div v-for="(btnParam, idx) in templateButtonUrlParams" :key="`btn-${btnParam.index}`" class="space-y-1">
+            <label class="text-sm font-medium">
+              {{ btnParam.type === 'COPY_CODE' ? `Coupon Code (${btnParam.text})` : $t('chat.urlButtonParam', { button: btnParam.text }) }}
+            </label>
+            <Input
+              v-model="templateButtonUrlParams[idx].value"
+              :placeholder="btnParam.type === 'COPY_CODE' ? 'WELCOME10' : $t('chat.urlButtonParamPlaceholder')"
               class="h-9"
             />
           </div>
