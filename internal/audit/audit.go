@@ -67,6 +67,7 @@ func ComputeChanges(oldData, newData any) []map[string]any {
 }
 
 // LogAudit creates an audit log entry asynchronously.
+// Optional extraChanges are appended to the computed diff (useful for masked sensitive fields).
 func LogAudit(
 	db *gorm.DB,
 	orgID, userID uuid.UUID,
@@ -75,8 +76,10 @@ func LogAudit(
 	resourceID uuid.UUID,
 	action models.AuditAction,
 	oldData, newData any,
+	extraChanges ...map[string]any,
 ) {
 	changes := ComputeChanges(oldData, newData)
+	changes = append(changes, extraChanges...)
 
 	if action == models.AuditActionUpdated && len(changes) == 0 {
 		return

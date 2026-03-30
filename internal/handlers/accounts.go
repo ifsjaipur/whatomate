@@ -222,6 +222,8 @@ func (a *App) UpdateAccount(r *fastglue.Request) error {
 	if req.BusinessID != "" {
 		account.BusinessID = req.BusinessID
 	}
+	tokenChanged := false
+	secretChanged := false
 	if req.AccessToken != "" {
 		enc, err := crypto.Encrypt(req.AccessToken, a.Config.App.EncryptionKey)
 		if err != nil {
@@ -229,6 +231,7 @@ func (a *App) UpdateAccount(r *fastglue.Request) error {
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update account", nil, "")
 		}
 		account.AccessToken = enc
+		tokenChanged = true
 	}
 	if req.AppSecret != "" {
 		enc, err := crypto.Encrypt(req.AppSecret, a.Config.App.EncryptionKey)
@@ -237,6 +240,7 @@ func (a *App) UpdateAccount(r *fastglue.Request) error {
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update account", nil, "")
 		}
 		account.AppSecret = enc
+		secretChanged = true
 	}
 	if req.WebhookVerifyToken != "" {
 		account.WebhookVerifyToken = req.WebhookVerifyToken
@@ -270,8 +274,20 @@ func (a *App) UpdateAccount(r *fastglue.Request) error {
 	a.InvalidateWhatsAppAccountCache(account.PhoneID)
 
 	a.DB.Preload("CreatedBy").Preload("UpdatedBy").First(account, "id = ?", account.ID)
+
+	var sensitiveChanges []map[string]any
+	if tokenChanged {
+		sensitiveChanges = append(sensitiveChanges, map[string]any{
+			"field": "access_token", "old_value": "********", "new_value": "********",
+		})
+	}
+	if secretChanged {
+		sensitiveChanges = append(sensitiveChanges, map[string]any{
+			"field": "app_secret", "old_value": "********", "new_value": "********",
+		})
+	}
 	audit.LogAudit(a.DB, orgID, userID, audit.GetUserName(a.DB, userID),
-		"account", account.ID, models.AuditActionUpdated, &oldAccount, account)
+		"account", account.ID, models.AuditActionUpdated, &oldAccount, account, sensitiveChanges...)
 
 	return r.SendEnvelope(accountToResponse(*account))
 }
