@@ -14,6 +14,8 @@ import { Label } from '@/components/ui/label'
 import { ArrowLeft, Save, Volume2, Grid3X3, Hash, Globe, Users, ExternalLink, Clock, PhoneOff, ChevronDown } from 'lucide-vue-next'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import AuditLogPanel from '@/components/shared/AuditLogPanel.vue'
+import MetadataPanel from '@/components/shared/MetadataPanel.vue'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'vue-sonner'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import ErrorState from '@/components/shared/ErrorState.vue'
@@ -40,6 +42,10 @@ const isCallStart = ref(false)
 const isOutgoingEnd = ref(false)
 const saving = ref(false)
 const auditRefreshKey = ref(0)
+const flowCreatedAt = ref('')
+const flowUpdatedAt = ref('')
+const flowCreatedByName = ref('')
+const flowUpdatedByName = ref('')
 const loading = ref(true)
 const loadError = ref(false)
 
@@ -369,6 +375,10 @@ async function loadFlow() {
     isActive.value = flow.is_active
     isCallStart.value = flow.is_call_start
     isOutgoingEnd.value = flow.is_outgoing_end
+    flowCreatedAt.value = flow.created_at || ''
+    flowUpdatedAt.value = flow.updated_at || ''
+    flowCreatedByName.value = flow.created_by?.full_name || ''
+    flowUpdatedByName.value = flow.updated_by?.full_name || ''
 
     if (flow.menu && flow.menu.version === 2) {
       loadFlowData(flow.menu)
@@ -463,30 +473,32 @@ onMounted(() => {
         />
       </div>
 
-      <!-- Properties Panel -->
-      <div
-        v-if="selectedIVRNode"
-        class="w-[320px] border-l bg-background overflow-y-auto shrink-0"
-      >
-        <IVRNodeProperties
-          :node="selectedIVRNode"
-          :current-flow-id="flowId"
-          @update:node="onUpdateNode"
-          @delete="requestDeleteSelectedNode"
-        />
+      <!-- Right Panel -->
+      <div class="w-[320px] border-l bg-background shrink-0 flex flex-col">
+        <!-- Node Properties (when a node is selected) -->
+        <div v-if="selectedIVRNode" class="flex-1 overflow-y-auto">
+          <IVRNodeProperties
+            :node="selectedIVRNode"
+            :current-flow-id="flowId"
+            @update:node="onUpdateNode"
+            @delete="requestDeleteSelectedNode"
+          />
+        </div>
+
+        <!-- Metadata + Activity Log (when no node is selected) -->
+        <ScrollArea v-else class="flex-1">
+          <div class="p-4 space-y-4">
+            <MetadataPanel
+              :created-at="flowCreatedAt"
+              :updated-at="flowUpdatedAt"
+              :created-by-name="flowCreatedByName"
+              :updated-by-name="flowUpdatedByName"
+            />
+            <AuditLogPanel :key="auditRefreshKey" resource-type="ivr_flow" :resource-id="flowId" />
+          </div>
+        </ScrollArea>
       </div>
     </div>
-
-    <!-- Activity Log (collapsible at the bottom) -->
-    <Collapsible class="border-t">
-      <CollapsibleTrigger class="flex items-center justify-between w-full px-4 py-2 text-sm font-medium hover:bg-muted/50 transition-colors">
-        {{ $t('common.activityLog', 'Activity Log') }}
-        <ChevronDown class="h-4 w-4" />
-      </CollapsibleTrigger>
-      <CollapsibleContent class="px-4 pb-4">
-        <AuditLogPanel :key="auditRefreshKey" resource-type="ivr_flow" :resource-id="flowId" />
-      </CollapsibleContent>
-    </Collapsible>
 
     <!-- Node Delete Confirmation -->
     <ConfirmDialog

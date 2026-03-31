@@ -351,16 +351,44 @@ func diffIVRMenuNodes(oldMenu, newMenu models.JSONB) []map[string]any {
 				"field": newN.Label + " → label", "old_value": oldN.Label, "new_value": newN.Label,
 			})
 		}
-		// Compare config fields
+		// Compare config fields — drill into nested maps for readable diffs
+		label := newN.Label
+		if label == "" {
+			label = id
+		}
 		for key, newVal := range newN.Config {
 			oldVal := oldN.Config[key]
 			oldJSON, _ := json.Marshal(oldVal)
 			newJSON, _ := json.Marshal(newVal)
-			if string(oldJSON) != string(newJSON) {
-				label := newN.Label
-				if label == "" {
-					label = id
+			if string(oldJSON) == string(newJSON) {
+				continue
+			}
+			// Try to diff nested maps (e.g. options: {"1": {"label": "Sales"}})
+			oldMap, oldIsMap := oldVal.(map[string]any)
+			newMap, newIsMap := newVal.(map[string]any)
+			if oldIsMap && newIsMap {
+				for subKey, subNew := range newMap {
+					subOld := oldMap[subKey]
+					sOldJSON, _ := json.Marshal(subOld)
+					sNewJSON, _ := json.Marshal(subNew)
+					if string(sOldJSON) != string(sNewJSON) {
+						// Extract readable value from nested object
+						oldLabel := extractLabel(subOld)
+						newLabel := extractLabel(subNew)
+						changes = append(changes, map[string]any{
+							"field": label + " → " + key + "[" + subKey + "]", "old_value": oldLabel, "new_value": newLabel,
+						})
+					}
 				}
+				// Check for removed keys
+				for subKey, subOld := range oldMap {
+					if _, exists := newMap[subKey]; !exists {
+						changes = append(changes, map[string]any{
+							"field": label + " → " + key + "[" + subKey + "]", "old_value": extractLabel(subOld), "new_value": nil,
+						})
+					}
+				}
+			} else {
 				changes = append(changes, map[string]any{
 					"field": label + " → " + key, "old_value": oldVal, "new_value": newVal,
 				})
@@ -369,6 +397,16 @@ func diffIVRMenuNodes(oldMenu, newMenu models.JSONB) []map[string]any {
 	}
 
 	return changes
+}
+
+// extractLabel returns a readable string from a value — if it's a map with a "label" key, return that
+func extractLabel(val any) any {
+	if m, ok := val.(map[string]any); ok {
+		if label, exists := m["label"]; exists {
+			return label
+		}
+	}
+	return val
 }
 
 // DeleteIVRFlow soft-deletes an IVR flow
