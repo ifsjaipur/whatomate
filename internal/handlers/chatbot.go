@@ -1068,8 +1068,46 @@ func (a *App) UpdateChatbotFlow(r *fastglue.Request) error {
 			old, exists := oldStepMap[s.StepName]
 			if !exists {
 				added = append(added, s.StepName)
-			} else if old.Message != s.Message || string(old.MessageType) != string(s.MessageType) || old.NextStep != s.NextStep {
-				modified = append(modified, s.StepName)
+			} else {
+				// Check individual fields and log each change
+				if old.Message != s.Message {
+					extraChanges = append(extraChanges, map[string]any{
+						"field": s.StepName + " → message", "old_value": old.Message, "new_value": s.Message,
+					})
+					modified = append(modified, s.StepName)
+				}
+				if string(old.MessageType) != string(s.MessageType) {
+					extraChanges = append(extraChanges, map[string]any{
+						"field": s.StepName + " → type", "old_value": string(old.MessageType), "new_value": string(s.MessageType),
+					})
+					if len(modified) == 0 || modified[len(modified)-1] != s.StepName {
+						modified = append(modified, s.StepName)
+					}
+				}
+				if old.NextStep != s.NextStep {
+					extraChanges = append(extraChanges, map[string]any{
+						"field": s.StepName + " → next_step", "old_value": old.NextStep, "new_value": s.NextStep,
+					})
+					if len(modified) == 0 || modified[len(modified)-1] != s.StepName {
+						modified = append(modified, s.StepName)
+					}
+				}
+				if string(old.InputType) != string(s.InputType) {
+					extraChanges = append(extraChanges, map[string]any{
+						"field": s.StepName + " → input_type", "old_value": string(old.InputType), "new_value": s.InputType,
+					})
+					if len(modified) == 0 || modified[len(modified)-1] != s.StepName {
+						modified = append(modified, s.StepName)
+					}
+				}
+				if old.StoreAs != s.StoreAs {
+					extraChanges = append(extraChanges, map[string]any{
+						"field": s.StepName + " → store_as", "old_value": old.StoreAs, "new_value": s.StoreAs,
+					})
+					if len(modified) == 0 || modified[len(modified)-1] != s.StepName {
+						modified = append(modified, s.StepName)
+					}
+				}
 			}
 		}
 		var removed []string
@@ -1087,11 +1125,6 @@ func (a *App) UpdateChatbotFlow(r *fastglue.Request) error {
 		if len(removed) > 0 {
 			extraChanges = append(extraChanges, map[string]any{
 				"field": "steps_removed", "old_value": strings.Join(removed, ", "), "new_value": nil,
-			})
-		}
-		if len(modified) > 0 {
-			extraChanges = append(extraChanges, map[string]any{
-				"field": "steps_modified", "old_value": nil, "new_value": strings.Join(modified, ", "),
 			})
 		}
 		if len(oldFlow.Steps) != len(req.Steps) {
