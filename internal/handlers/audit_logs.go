@@ -7,6 +7,7 @@ import (
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	"gorm.io/gorm"
 )
 
 // AuditLogResponse represents an audit log entry in API response
@@ -78,7 +79,8 @@ func (a *App) ListAuditLogs(r *fastglue.Request) error {
 	var logs []models.AuditLog
 	var total int64
 
-	baseQuery.Model(&models.AuditLog{}).Count(&total)
+	countQuery := baseQuery.Session(&gorm.Session{})
+	countQuery.Model(&models.AuditLog{}).Count(&total)
 
 	if err := pg.Apply(baseQuery.Order("created_at DESC")).Find(&logs).Error; err != nil {
 		a.Log.Error("Failed to list audit logs", "error", err)
