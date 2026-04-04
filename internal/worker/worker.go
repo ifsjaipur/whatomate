@@ -260,8 +260,8 @@ func (w *Worker) sendTemplateMessage(ctx context.Context, account *models.WhatsA
 
 	// Use the shared component builder (same as chat template sending)
 	components := whatsapp.BuildTemplateComponents(bodyParams, template.HeaderType, campaignHeaderMediaID)
-	// Add Flow button components if template has Flow buttons
-	flowComponents := whatsapp.FlowButtonComponents(template.Buttons)
+	// Add auto-generated button components (Flow needs flow_token)
+	flowComponents := whatsapp.AutoButtonComponents(template.Buttons)
 	components = append(components, flowComponents...)
 
 	return w.WhatsApp.SendTemplateMessage(ctx, waAccount, recipient.PhoneNumber, template.Name, template.Language, components)

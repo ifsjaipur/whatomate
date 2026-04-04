@@ -300,9 +300,10 @@ func BuildTemplateComponents(bodyParams map[string]string, headerType string, he
 	return components
 }
 
-// FlowButtonComponents generates the required button components for FLOW buttons in a template.
-// Meta requires a sub_type "flow" component with a flow_token for each Flow button.
-func FlowButtonComponents(templateButtons []any) []map[string]any {
+// AutoButtonComponents generates button components for button types that require
+// server-generated parameters (FLOW needs flow_token, OTP needs the code).
+// These are auto-generated and don't require user input.
+func AutoButtonComponents(templateButtons []any) []map[string]any {
 	if len(templateButtons) == 0 {
 		return nil
 	}
@@ -314,23 +315,24 @@ func FlowButtonComponents(templateButtons []any) []map[string]any {
 			continue
 		}
 		t, _ := btn["type"].(string)
-		if strings.ToUpper(t) != "FLOW" {
-			continue
-		}
+		t = strings.ToUpper(t)
 
-		components = append(components, map[string]any{
-			"type":     "button",
-			"sub_type": "flow",
-			"index":    fmt.Sprintf("%d", i),
-			"parameters": []map[string]any{
-				{
-					"type": "action",
-					"action": map[string]any{
-						"flow_token": fmt.Sprintf("flow_%d", time.Now().UnixNano()),
+		switch t {
+		case "FLOW":
+			components = append(components, map[string]any{
+				"type":     "button",
+				"sub_type": "flow",
+				"index":    fmt.Sprintf("%d", i),
+				"parameters": []map[string]any{
+					{
+						"type": "action",
+						"action": map[string]any{
+							"flow_token": fmt.Sprintf("flow_%d", time.Now().UnixNano()),
+						},
 					},
 				},
-			},
-		})
+			})
+		}
 	}
 	return components
 }
@@ -367,7 +369,7 @@ func ButtonURLParamsToComponents(buttonParams map[string]string, templateButtons
 	for _, index := range keys {
 		value := buttonParams[index]
 		// Skip button types that don't accept dynamic parameters
-		if t := btnTypes[index]; t == "QUICK_REPLY" || t == "FLOW" || t == "PHONE_NUMBER" {
+		if t := btnTypes[index]; t == "QUICK_REPLY" || t == "FLOW" || t == "PHONE_NUMBER" || t == "VOICE_CALL" || t == "OTP" {
 			continue
 		}
 		if btnTypes[index] == "COPY_CODE" {

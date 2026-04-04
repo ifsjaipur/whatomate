@@ -98,6 +98,10 @@ type TemplateButton struct {
 	FlowID         json.Number `json:"flow_id,omitempty"`
 	FlowAction     string      `json:"flow_action,omitempty"`
 	NavigateScreen string      `json:"navigate_screen,omitempty"`
+	OTPType        string      `json:"otp_type,omitempty"`        // "COPY_CODE", "ONE_TAP", "ZERO_TAP"
+	AutofillText   string      `json:"autofill_text,omitempty"`   // For ONE_TAP OTP
+	PackageName    string      `json:"package_name,omitempty"`    // For ONE_TAP/ZERO_TAP OTP
+	SignatureHash  string      `json:"signature_hash,omitempty"`  // For ONE_TAP/ZERO_TAP OTP
 }
 
 // TemplateExample represents example values for template variables

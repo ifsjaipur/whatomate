@@ -214,6 +214,29 @@ func (c *Client) SubmitTemplate(ctx context.Context, account *Account, template 
 					if screen, ok := btnMap["navigate_screen"].(string); ok && screen != "" {
 						button["navigate_screen"] = screen
 					}
+				case "VOICE_CALL":
+					button["type"] = "VOICE_CALL"
+					button["text"] = btnText
+				case "OTP":
+					button["type"] = "OTP"
+					otpType, _ := btnMap["otp_type"].(string)
+					if otpType == "" {
+						otpType = "COPY_CODE"
+					}
+					button["otp_type"] = otpType
+					if otpType == "ONE_TAP" || otpType == "ZERO_TAP" {
+						if pkg, ok := btnMap["package_name"].(string); ok && pkg != "" {
+							button["package_name"] = pkg
+						}
+						if hash, ok := btnMap["signature_hash"].(string); ok && hash != "" {
+							button["signature_hash"] = hash
+						}
+					}
+					if otpType == "ONE_TAP" {
+						if autofill, ok := btnMap["autofill_text"].(string); ok && autofill != "" {
+							button["autofill_text"] = autofill
+						}
+					}
 				default:
 					button["type"] = "QUICK_REPLY"
 					button["text"] = btnText

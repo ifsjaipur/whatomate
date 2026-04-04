@@ -44,6 +44,8 @@ import {
   Send,
   Plus,
   X,
+  ChevronDown,
+  Info,
 } from 'lucide-vue-next'
 import { getErrorMessage } from '@/lib/api-utils'
 
@@ -94,6 +96,7 @@ const deleteDialogOpen = ref(false)
 const publishDialogOpen = ref(false)
 const isPublishing = ref(false)
 const isPreviewOpen = ref(false)
+const isDetailsOpen = ref(true)
 
 // Header media upload state
 const headerMediaFile = ref<File | null>(null)
@@ -113,7 +116,8 @@ const isEditable = computed(() => {
   if (isNew.value) return true
   if (!template.value) return false
   const status = template.value.status?.toUpperCase()
-  return status === 'PENDING' || status === 'DRAFT' || !status
+  // Meta allows editing: APPROVED, REJECTED, PAUSED, DRAFT. Not PENDING (under review).
+  return status === 'APPROVED' || status === 'REJECTED' || status === 'PAUSED' || status === 'DRAFT' || !status
 })
 
 const form = ref({
@@ -135,6 +139,8 @@ const buttonTypes = [
   { value: 'PHONE_NUMBER', label: 'Phone Number' },
   { value: 'COPY_CODE', label: 'Copy Code' },
   { value: 'FLOW', label: 'Flow' },
+  { value: 'VOICE_CALL', label: 'Call on WhatsApp' },
+  { value: 'OTP', label: 'OTP' },
 ]
 
 function addButton() {
@@ -235,6 +241,7 @@ async function loadTemplate() {
     const data = (response.data as any).data
     template.value = data
     syncForm()
+    isDetailsOpen.value = false
     nextTick(() => { hasChanges.value = false })
   } catch {
     isNotFound.value = true
@@ -473,18 +480,26 @@ onMounted(async () => {
 
     <!-- Details Card -->
     <Card>
-      <CardHeader class="pb-3">
+      <CardHeader class="pb-3 cursor-pointer" @click="isDetailsOpen = !isDetailsOpen">
         <div class="flex items-center justify-between">
-          <CardTitle class="text-sm font-medium">{{ $t('templates.details', 'Details') }}</CardTitle>
-          <Badge v-if="!isNew && template?.status" :variant="statusVariant">
-            {{ template.status }}
-          </Badge>
+          <div class="flex items-center gap-2">
+            <CardTitle class="text-sm font-medium">{{ $t('templates.details', 'Details') }}</CardTitle>
+            <Badge v-if="!isNew && template?.status" :variant="statusVariant">
+              {{ template.status }}
+            </Badge>
+          </div>
+          <ChevronDown class="h-4 w-4 text-muted-foreground transition-transform" :class="isDetailsOpen && 'rotate-180'" />
         </div>
       </CardHeader>
-      <CardContent class="space-y-4">
+      <CardContent v-show="isDetailsOpen" class="space-y-4">
+        <!-- Edit limits info for approved templates -->
+        <div v-if="template?.status?.toUpperCase() === 'APPROVED'" class="flex items-start gap-2 rounded-md bg-blue-500/10 border border-blue-500/20 px-3 py-2 text-xs text-blue-400 light:text-blue-600">
+          <Info class="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          <span>{{ $t('templates.editLimitsInfo', 'Approved templates can be edited up to 10 times in 30 days (1 edit per 24 hours). Editing triggers a new review which may take up to 24 hours. Name, language, and category cannot be changed.') }}</span>
+        </div>
         <div class="space-y-1.5">
           <Label class="text-xs">{{ $t('templates.whatsappAccount', 'WhatsApp Account') }}</Label>
-          <Select v-model="form.whatsapp_account" :disabled="!canWrite || !isNew">
+          <Select v-model="form.whatsapp_account" :disabled="!canWrite || !!template?.meta_template_id">
             <SelectTrigger><SelectValue :placeholder="$t('templates.selectAccount', 'Select account')" /></SelectTrigger>
             <SelectContent>
               <SelectItem v-for="account in accounts" :key="account.id" :value="account.name">
@@ -495,7 +510,7 @@ onMounted(async () => {
         </div>
         <div class="space-y-1.5">
           <Label class="text-xs">{{ $t('templates.name', 'Name') }} *</Label>
-          <Input v-model="form.name" :disabled="!canWrite || !isEditable" />
+          <Input v-model="form.name" :disabled="!canWrite || !!template?.meta_template_id" />
         </div>
         <div class="space-y-1.5">
           <Label class="text-xs">{{ $t('templates.displayName', 'Display Name') }}</Label>
@@ -503,7 +518,7 @@ onMounted(async () => {
         </div>
         <div class="space-y-1.5">
           <Label class="text-xs">{{ $t('templates.language', 'Language') }}</Label>
-          <Select v-model="form.language" :disabled="!canWrite || !isEditable">
+          <Select v-model="form.language" :disabled="!canWrite || !!template?.meta_template_id">
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem v-for="lang in languages" :key="lang.code" :value="lang.code">
@@ -514,7 +529,7 @@ onMounted(async () => {
         </div>
         <div class="space-y-1.5">
           <Label class="text-xs">{{ $t('templates.category', 'Category') }}</Label>
-          <Select v-model="form.category" :disabled="!canWrite || !isEditable">
+          <Select v-model="form.category" :disabled="!canWrite || !isEditable || (!!template?.meta_template_id && template?.status?.toUpperCase() === 'APPROVED')">
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem v-for="cat in categories" :key="cat.value" :value="cat.value">
@@ -702,6 +717,31 @@ onMounted(async () => {
                 <Input v-model="button.navigate_screen" placeholder="SCREEN_ID" class="h-8 text-xs" :disabled="!canWrite || !isEditable" />
               </div>
             </div>
+            <div v-if="button.type === 'OTP'" class="space-y-2">
+              <div class="space-y-1">
+                <Label class="text-xs">{{ $t('templates.otpType', 'OTP Type') }}</Label>
+                <Select v-model="button.otp_type" :disabled="!canWrite || !isEditable">
+                  <SelectTrigger class="h-8 text-xs">
+                    <SelectValue placeholder="Copy Code" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="COPY_CODE">Copy Code</SelectItem>
+                    <SelectItem value="ONE_TAP">One Tap</SelectItem>
+                    <SelectItem value="ZERO_TAP">Zero Tap</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div v-if="button.otp_type === 'ONE_TAP'" class="space-y-1">
+                <Label class="text-xs">{{ $t('templates.autofillText', 'Autofill Text') }}</Label>
+                <Input v-model="button.autofill_text" placeholder="Autofill" class="h-8 text-xs" :disabled="!canWrite || !isEditable" />
+              </div>
+              <div v-if="button.otp_type === 'ONE_TAP' || button.otp_type === 'ZERO_TAP'" class="space-y-1">
+                <Label class="text-xs">{{ $t('templates.packageName', 'Package Name') }}</Label>
+                <Input v-model="button.package_name" placeholder="com.example.app" class="h-8 text-xs" :disabled="!canWrite || !isEditable" />
+                <Label class="text-xs">{{ $t('templates.signatureHash', 'Signature Hash') }}</Label>
+                <Input v-model="button.signature_hash" placeholder="App signature hash" class="h-8 text-xs" :disabled="!canWrite || !isEditable" />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -713,7 +753,7 @@ onMounted(async () => {
             :disabled="!canWrite || !isEditable"
           />
         </div>
-      </CardContent>
+        </CardContent>
     </Card>
 
     <!-- Activity Log -->
@@ -732,6 +772,24 @@ onMounted(async () => {
         :created-by-name="template?.created_by_name"
         :updated-by-name="template?.updated_by_name"
       />
+
+      <!-- Editing Guidelines -->
+      <Card v-if="template?.meta_template_id">
+        <CardHeader class="pb-3">
+          <CardTitle class="text-sm font-medium">{{ $t('templates.editingGuidelines', 'Editing Guidelines') }}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ul class="list-disc list-inside space-y-2 text-sm text-muted-foreground">
+            <li>{{ $t('templates.guideEditLimit', 'Approved templates can be edited up to 10 times in a 30-day window') }}</li>
+            <li>{{ $t('templates.guideDailyLimit', 'Within a 24-hour period, you are limited to 1 edit') }}</li>
+            <li>{{ $t('templates.guideReview', 'Editing triggers a new review process, which can take up to 24 hours') }}</li>
+            <li>{{ $t('templates.guideEditable', 'You can edit: body, header, footer, and buttons') }}</li>
+            <li>{{ $t('templates.guideNotEditable', 'You cannot change: name, language, or category of approved templates') }}</li>
+            <li>{{ $t('templates.guidePending', 'While under review, the template cannot be used to send messages') }}</li>
+            <li>{{ $t('templates.guideRejected', 'Rejected or paused templates have no edit limits') }}</li>
+          </ul>
+        </CardContent>
+      </Card>
     </template>
   </DetailPageLayout>
 
