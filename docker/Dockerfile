@@ -78,4 +78,6 @@ RUN mkdir -p /app/uploads /app/audio
 EXPOSE 8080
 
 # Run the binary
-CMD ["./whatomate", "server", "-config", "config.toml", "-migrate"]
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+ENTRYPOINT ["/app/entrypoint.sh"]
