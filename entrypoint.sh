@@ -38,6 +38,12 @@ openai_api_key = "${AI_OPENAI_API_KEY:-}"
 anthropic_api_key = "${AI_ANTHROPIC_API_KEY:-}"
 google_api_key = "${AI_GOOGLE_API_KEY:-}"
 
+[tts]
+engine = "piper"
+piper_binary = "/usr/local/bin/piper"
+piper_model = "/opt/piper/models/en_US-lessac-medium.onnx"
+output_dir = "/app/audio"
+
 [storage]
 type = "local"
 local_path = "./uploads"
